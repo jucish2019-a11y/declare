@@ -1,16 +1,38 @@
 """Player profile: persistent stats, settings, unlocks, achievements.
 
-Single JSON file at ~/.declare/profile.json. Schema-versioned for future
-migrations. Survives restarts. All writes are atomic (write-temp + rename).
+Single JSON file at ~/.declare/profile.json (native) or localStorage (web).
+Schema-versioned for future migrations. All writes are atomic (write-temp + rename)
+on native; localStorage on web.
 """
 import json
 import os
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
 
 
 SCHEMA_VERSION = 1
+
+
+def _using_js_storage():
+    return sys.platform == "emscripten"
+
+
+def _load_js_storage():
+    import js
+    raw = js.localStorage.getItem("declare_profile")
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+
+
+def _save_js_storage(data):
+    import js
+    js.localStorage.setItem("declare_profile", json.dumps(data))
 
 
 def _profile_dir():
@@ -123,6 +145,12 @@ class Profile:
 
 
 def load() -> Profile:
+    if _using_js_storage():
+        data = _load_js_storage()
+        if data is not None:
+            return _from_dict(data)
+        prof = Profile(created_at=time.time(), last_played_at=time.time())
+        return prof
     path = _profile_path()
     if not os.path.exists(path):
         prof = Profile(created_at=time.time(), last_played_at=time.time())
@@ -201,8 +229,6 @@ def _from_dict(data: dict) -> Profile:
 
 
 def save(prof: Profile):
-    os.makedirs(_profile_dir(), exist_ok=True)
-    path = _profile_path()
     data = {
         "schema_version": prof.schema_version,
         "created_at": prof.created_at,
@@ -214,6 +240,11 @@ def save(prof: Profile):
         "settings": asdict(prof.settings),
         "achievements": prof.achievements,
     }
+    if _using_js_storage():
+        _save_js_storage(data)
+        return
+    os.makedirs(_profile_dir(), exist_ok=True)
+    path = _profile_path()
     fd, tmp = tempfile.mkstemp(prefix="profile.", suffix=".tmp", dir=_profile_dir())
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:

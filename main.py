@@ -1,5 +1,6 @@
 import sys
 import os
+import asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -275,7 +276,7 @@ def _translate_mouse_event(event, display):
     return event
 
 
-def main():
+async def main():
     os.environ.setdefault("SDL_VIDEO_CENTERED", "1")
     os.environ.setdefault("SDL_HINT_WINDOWS_DPI_AWARENESS", "permonitorv2")
     pygame.init()
@@ -307,7 +308,7 @@ def main():
     edge_flash = EdgeFlash()
     vignette = Vignette()
     lamp = LampGlow()
-    tutorial = TutorialDirector()
+    tutorial = TutorialDirector(screen)
     first_launch = FirstLaunchSplash()
     if not prof.tutorial_complete:
         first_launch.show()
@@ -366,6 +367,7 @@ def main():
 
     running = True
     while running:
+        await asyncio.sleep(0)
         dt = clock.tick(FPS) / 1000.0
         mouse_pos = pygame.mouse.get_pos()
 
@@ -444,7 +446,7 @@ def main():
 
             if tutorial.active:
                 t_action = tutorial.handle_event(event)
-                if t_action == "advance":
+                if t_action == "next":
                     if tutorial.advance():
                         prof.tutorial_complete = True
                         profile_mod.unlock(prof, "tutorial_done")
@@ -452,6 +454,12 @@ def main():
                         toasts.push("Tutorial complete!", kind="achievement",
                                     icon="*", life=3.0)
                 elif t_action == "skip":
+                    if tutorial.skip_chapter():
+                        prof.tutorial_complete = True
+                        profile_mod.unlock(prof, "tutorial_done")
+                        profile_mod.save(prof)
+                        toasts.push("Tutorial complete!", kind="achievement",
+                                    icon="*", life=3.0)
                     audio.play("click")
                 if t_action:
                     continue
@@ -1669,4 +1677,4 @@ def _react_to_log_entry(entry, particles, toasts, gm, renderer,
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

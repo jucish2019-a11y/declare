@@ -6,6 +6,18 @@ Declare is a 2–4 player card game where the goal is to have the **lowest score
 
 ---
 
+## Play Online
+
+**No installation required — play Declare directly in your browser:**
+
+### [:arrow_forward: Live Demo](https://jucish2019-a11y.github.io/declare/)
+
+The web version runs via WebAssembly (pygbag) and supports the full game including tutorial. Progress is saved to browser localStorage.
+
+> **Note:** The web demo is best played on desktop with a keyboard. Some browsers may require a click to start (audio policy).
+
+---
+
 ## What's New in This Version
 
 This build merges the **polished UI systems** from [VicOlaitan's Declare-master](https://github.com/VicOlaitan/Declare-master) with the **5 new game mechanics** from [Declare.v1](https://github.com/jucish2019-a11y/Declare.v1):
@@ -87,26 +99,30 @@ All five can be toggled on/off in the settings menu.
 
 ## Installation
 
-### 1. Clone the repository
+### Play in Your Browser (no install)
+
+Open **[https://jucish2019-a11y.github.io/declare/](https://jucish2019-a11y.github.io/declare/)** — the full game runs in-browser.
+
+### Run Locally
 
 ```bash
-git clone https://github.com/jucish2019-a11y/Declare.v1.git
-cd Declare.v1
+git clone https://github.com/jucish2019-a11y/declare.git
+cd declare
 ```
 
-### 2. Install dependencies
+#### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Download font assets (optional — falls back to system fonts)
+#### 3. Download font assets (optional — falls back to system fonts)
 
 ```bash
 python download_fonts.py
 ```
 
-### 4. Run the game
+#### 4. Run the game
 
 ```bash
 python main.py
@@ -195,7 +211,7 @@ Settings persist across sessions via the profile system.
 declare/
 ├── main.py                 # Entry point, game loop, UI integration
 ├── config.py               # All game constants, colors, layout values
-├── requirements.txt        # pygame >= 2.5.0
+├── requirements.txt        # pygame >= 2.5.0, pygame-ce >= 2.5.0
 │
 ├── game/
 │   ├── card.py             # Card and Deck classes
@@ -261,7 +277,7 @@ The game is organized into **three layers**:
 - `card_render.py` uses PNG card images with procedural fallback
 
 ### UI Integration Layer (`main.py`)
-- Single `main()` function contains the complete event loop
+- `async def main()` runs the event loop (supports both native and WASM via pygbag)
 - Manages screen routing (menu / setup / peek / game / game_over / profile / how_to_play)
 - Integrates all polish systems: audio, particles, feel (camera shake/time warp/vignette/edge flash), toasts, hints, captions, tutorial, accessibility panel, pause, and profile
 
@@ -269,7 +285,7 @@ The game is organized into **three layers**:
 
 ## Profile & Achievements
 
-On first launch, a profile is created at `~/.declare/profile.json`. It tracks:
+On first launch, a profile is created at `~/.declare/profile.json` (native) or browser localStorage (web demo). It tracks:
 
 - Games played and won
 - Win streaks (current and longest)

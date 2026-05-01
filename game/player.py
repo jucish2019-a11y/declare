@@ -102,6 +102,32 @@ class Player:
                     if k[0] != self.seat_index
                 }
 
+    def swap_hand_slots(self, slot_a: int, slot_b: int, all_players: list):
+        card_a = self.hand[slot_a]
+        card_b = self.hand[slot_b]
+        self.hand[slot_a] = card_b
+        self.hand[slot_b] = card_a
+        knew_a = slot_a in self.known_cards
+        knew_b = slot_b in self.known_cards
+        if knew_a and knew_b:
+            self.known_cards[slot_a], self.known_cards[slot_b] = self.known_cards[slot_b], self.known_cards[slot_a]
+        elif knew_a:
+            self.known_cards[slot_b] = self.known_cards.pop(slot_a)
+        elif knew_b:
+            self.known_cards[slot_a] = self.known_cards.pop(slot_b)
+        pos_a = self.card_positions.pop(slot_a, None)
+        pos_b = self.card_positions.pop(slot_b, None)
+        if pos_b is not None:
+            self.card_positions[slot_a] = pos_b
+        if pos_a is not None:
+            self.card_positions[slot_b] = pos_a
+        for p in all_players:
+            if p.seat_index != self.seat_index:
+                p.known_opponent_cards = {
+                    k: v for k, v in p.known_opponent_cards.items()
+                    if k[0] != self.seat_index
+                }
+
     def add_penalty_card(self, card: Card) -> int | None:
         for i in range(len(self.hand)):
             if self.hand[i] is None:

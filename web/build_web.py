@@ -8,16 +8,25 @@ import sys
 import os
 
 def main():
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    # Run from project root so pygbag finds main.py and assets/
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(project_root)
 
     print("Building Declare for Web...")
     print("This may take several minutes on first run.")
 
     try:
-        subprocess.run([sys.executable, "-m", "pygbag", "--build", "--title", "Declare", "--ume_block", "0", "--width", "1600", "--height", "900", "."])
+        subprocess.run([
+            sys.executable, "-m", "pygbag",
+            "--build", "--title", "Declare",
+            "--ume_block", "0",
+            "--width", "1600", "--height", "900",
+            "--template", "web/declare.tmpl",
+            "."
+        ])
         print("\nBuild complete! The 'build/' directory contains the web app.")
         print("To test locally, serve the build directory:")
-        print("  python -m http.server 8000 -d build")
+        print("  python -m http.server 8000 -d build/web")
         print("Then open http://localhost:8000 in your browser.")
     except Exception as e:
         print(f"Build failed: {e}")

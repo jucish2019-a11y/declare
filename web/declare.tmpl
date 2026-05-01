@@ -289,12 +289,15 @@ function show_infobox() {
             #rotate { display: flex; }
         }
 
-        body {
+        html, body {
             font-family: 'Inter', 'Segoe UI', sans-serif;
             margin: 0;
-            padding: none;
+            padding: 0;
             background-color: #0e1f18;
             overflow: hidden;
+            width: 100%;
+            height: 100%;
+            height: 100dvh;
         }
 
         .topright{
@@ -430,6 +433,23 @@ frameborder="1"
         console.warn("TODO: panda3d canvas monitor", self, ecw, ech)
     }
 
+    function _dpr_setup() {
+        const canvas = document.getElementById('canvas');
+        const dpr = window.devicePixelRatio || 1;
+        const vw = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+        const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        // Set internal framebuffer to DPR-scaled size for crisp rendering
+        canvas.width = Math.floor(vw * dpr);
+        canvas.height = Math.floor(vh * dpr);
+        // CSS size stays at viewport size
+        canvas.style.width = vw + 'px';
+        canvas.style.height = vh + 'px';
+        // Expose dpr for Python
+        window._dpr = dpr;
+        window._vw = vw;
+        window._vh = vh;
+    }
+
     async function custom_onload(debug_hidden) {
         // this is called before anything python is loaded
         // make your js customization here
@@ -446,6 +466,8 @@ frameborder="1"
         if (screen.orientation && screen.orientation.lock) {
             try { await screen.orientation.lock('landscape'); } catch (e) {}
         }
+
+        _dpr_setup();
 
         show_infobox()
     }

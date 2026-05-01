@@ -270,14 +270,24 @@ class _ScaledDisplay:
         self.fullscreen = False
         self._touch_pos = (0, 0)
         self._touch_pressed = False
+        self._dpr = 1.0
         if sys.platform == "emscripten":
             try:
                 import platform as wasm_platform
-                bw, bh = wasm_platform.window.innerWidth, wasm_platform.window.innerHeight
-                self._last_browser_size = (bw, bh)
-                scale = min(bw / SCREEN_WIDTH, bh / SCREEN_HEIGHT)
-                win_w = max(640, int(SCREEN_WIDTH * scale))
-                win_h = max(360, int(SCREEN_HEIGHT * scale))
+                dpr = getattr(wasm_platform.window, '_dpr', 1.0)
+                vw = getattr(wasm_platform.window, '_vw', wasm_platform.window.innerWidth)
+                vh = getattr(wasm_platform.window, '_vh', wasm_platform.window.innerHeight)
+                self._dpr = dpr
+                self._last_browser_size = (vw, vh)
+                # On mobile, fill the full viewport for maximum screen usage.
+                # On desktop, preserve 16:9 aspect ratio to avoid distortion.
+                if is_mobile() or (vw / max(1, vh)) > 1.8 or (vw / max(1, vh)) < 1.5:
+                    win_w = max(640, int(vw * dpr))
+                    win_h = max(360, int(vh * dpr))
+                else:
+                    scale = min(vw / SCREEN_WIDTH, vh / SCREEN_HEIGHT)
+                    win_w = max(640, int(SCREEN_WIDTH * scale * dpr))
+                    win_h = max(360, int(SCREEN_HEIGHT * scale * dpr))
             except Exception:
                 win_w, win_h = SCREEN_WIDTH, SCREEN_HEIGHT
         else:
@@ -301,13 +311,20 @@ class _ScaledDisplay:
             return
         try:
             import platform as wasm_platform
-            bw, bh = wasm_platform.window.innerWidth, wasm_platform.window.innerHeight
-            if self._last_browser_size is not None and (bw, bh) == self._last_browser_size:
+            dpr = getattr(wasm_platform.window, '_dpr', 1.0)
+            vw = getattr(wasm_platform.window, '_vw', wasm_platform.window.innerWidth)
+            vh = getattr(wasm_platform.window, '_vh', wasm_platform.window.innerHeight)
+            if self._last_browser_size is not None and (vw, vh) == self._last_browser_size and dpr == self._dpr:
                 return
-            self._last_browser_size = (bw, bh)
-            scale = min(bw / SCREEN_WIDTH, bh / SCREEN_HEIGHT)
-            new_w = max(640, int(SCREEN_WIDTH * scale))
-            new_h = max(360, int(SCREEN_HEIGHT * scale))
+            self._dpr = dpr
+            self._last_browser_size = (vw, vh)
+            if is_mobile() or (vw / max(1, vh)) > 1.8 or (vw / max(1, vh)) < 1.5:
+                new_w = max(640, int(vw * dpr))
+                new_h = max(360, int(vh * dpr))
+            else:
+                scale = min(vw / SCREEN_WIDTH, vh / SCREEN_HEIGHT)
+                new_w = max(640, int(SCREEN_WIDTH * scale * dpr))
+                new_h = max(360, int(SCREEN_HEIGHT * scale * dpr))
             if (new_w, new_h) != self.window.get_size():
                 self.window = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
         except Exception:

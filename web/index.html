@@ -7,8 +7,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes"/>
     <title>Declare - Card Game</title>
     <style>
-        html, body { margin: 0; padding: 0; background: #1a1a2e; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        #canvas { border: 2px solid #c9a227; border-radius: 8px; touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+        html, body { margin: 0; padding: 0; background: #1a1a2e; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; height: 100dvh; overflow: hidden; }
+        #canvas { border: 2px solid #c9a227; border-radius: 8px; touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; width: 100%; height: 100%; }
         #loading { color: #c9a227; font-family: sans-serif; font-size: 24px; text-align: center; }
         #rotate { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #1a1a2e; color: #c9a227; font-family: sans-serif; font-size: 20px; text-align: center; align-items: center; justify-content: center; z-index: 9999; }
         @media (orientation: portrait) and (max-width: 600px) { #rotate { display: flex; } }
@@ -19,8 +19,19 @@
     <div id="rotate">Please rotate your device to landscape for the best experience.</div>
     <canvas id="canvas"></canvas>
     <script>
+        function _dpr_setup() {
+            var canvas = document.getElementById('canvas');
+            var dpr = window.devicePixelRatio || 1;
+            var vw = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+            var vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            canvas.width = Math.floor(vw * dpr);
+            canvas.height = Math.floor(vh * dpr);
+            canvas.style.width = vw + 'px';
+            canvas.style.height = vh + 'px';
+        }
         window.onload = function() {
             document.getElementById('loading').style.display = 'none';
+            _dpr_setup();
             if (screen.orientation && screen.orientation.lock) {
                 screen.orientation.lock('landscape').catch(function() {});
             }

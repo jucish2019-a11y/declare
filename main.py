@@ -268,6 +268,8 @@ def _clamp_to_bounds(cx, cy, bounds):
 class _ScaledDisplay:
     def __init__(self):
         self._last_browser_size = None
+        self._windowed_size = (SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.fullscreen = False
         if sys.platform == "emscripten":
             try:
                 import platform as wasm_platform
@@ -282,9 +284,10 @@ class _ScaledDisplay:
             info = pygame.display.Info()
             max_w = max(800, info.current_w - 80)
             max_h = max(600, info.current_h - 160)
-            scale = min(max_w / SCREEN_WIDTH, max_h / SCREEN_HEIGHT, 1.0)
+            scale = min(max_w / SCREEN_WIDTH, max_h / SCREEN_HEIGHT)
             win_w = max(640, int(SCREEN_WIDTH * scale))
             win_h = max(360, int(SCREEN_HEIGHT * scale))
+        self._windowed_size = (win_w, win_h)
         self.window = pygame.display.set_mode((win_w, win_h), pygame.RESIZABLE)
         self.logical = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)).convert()
         self.shake_offset = (0, 0)
@@ -314,6 +317,16 @@ class _ScaledDisplay:
             int(pos[0] * SCREEN_WIDTH / win_w),
             int(pos[1] * SCREEN_HEIGHT / win_h),
         )
+
+    def toggle_fullscreen(self):
+        if sys.platform == "emscripten":
+            return
+        self.fullscreen = not self.fullscreen
+        if self.fullscreen:
+            self._windowed_size = self.window.get_size()
+            self.window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        else:
+            self.window = pygame.display.set_mode(self._windowed_size, pygame.RESIZABLE)
 
     def set_shake(self, offset):
         self.shake_offset = offset
@@ -530,6 +543,11 @@ async def main():
                     access_panel.close()
                 else:
                     access_panel.open()
+                continue
+
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
+                display.toggle_fullscreen()
+                audio.play("click")
                 continue
 
             if access_panel.active:

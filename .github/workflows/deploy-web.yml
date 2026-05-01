@@ -32,7 +32,7 @@ jobs:
 
       - name: Build web demo
         run: |
-          python -m pygbag --build . --title "Declare"
+          python -m pygbag --title "Declare" .
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

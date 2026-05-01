@@ -1,8 +1,27 @@
 import os
+import sys
 
 SCREEN_WIDTH = 1600
 SCREEN_HEIGHT = 900
 FPS = 60
+
+
+def is_mobile():
+    """Detect mobile/touch-first environments."""
+    if sys.platform == "emscripten":
+        try:
+            import platform as wasm_platform
+            ua = getattr(wasm_platform.window.navigator, 'userAgent', '')
+            ua = str(ua).lower()
+            return any(k in ua for k in ('android', 'iphone', 'ipad', 'mobile'))
+        except Exception:
+            return False
+    return False
+
+
+def get_mobile_scale():
+    """Return a scaling factor for UI elements on mobile devices."""
+    return 1.15 if is_mobile() else 1.0
 AI_DELAY = 0.8
 PEEK_REVEAL_SECONDS = 2.5
 
@@ -153,13 +172,13 @@ DEFAULT_FELT = 'forest'
 DEFAULT_SELF_PAIR_ENABLED = True
 DEFAULT_SHUFFLE_ENABLED = True
 DEFAULT_WRONG_DROP_PENALTY = True
-DEFAULT_REACTION_WINDOW_SECONDS = 3.0
-DEFAULT_REACTION_WINDOW = 3.0
+DEFAULT_REACTION_WINDOW_SECONDS = 8.0
+DEFAULT_REACTION_WINDOW = 8.0
 
 SWAP_REVEAL_SECONDS = 2.0
 
-REACTION_WINDOW_OPTIONS = [2.0, 3.0, 5.0]
-REACTION_WINDOW_LABELS = ['2s', '3s', '5s']
+REACTION_WINDOW_OPTIONS = [3.0, 8.0, 13.0]
+REACTION_WINDOW_LABELS = ['3s', '8s', '13s']
 
 AI_REACTION_DELAY = 1.0
 

@@ -25,7 +25,7 @@ from config import (
     ANIM_NOTIFICATION_DURATION, CARD_GRID_SPACING_X, CARD_GRID_SPACING_Y,
     ANIM_SHUFFLE_DURATION, ANIM_REACTIVE_DROP_DURATION, ANIM_PENALTY_DRAW_DURATION,
     AI_REACTION_DELAY,
-    FONT_PATHS,
+    FONT_PATHS, is_mobile, get_mobile_scale,
 )
 from game.game_manager import GameManager, GameState
 from game.player import HumanPlayer
@@ -119,105 +119,103 @@ def _build_action_buttons(gm, ui_font, game_settings=None):
     valid = get_valid_actions(cp, gm.drawn_card, gm.has_drawn_this_turn)
     if not valid:
         return buttons
-    btn_y = ACTION_BAR_Y + ACTION_BAR_H // 2
-    btn_h = 44
-    spacing = 8
-    if gm.state == GameState.TURN_START:
-        x = SCREEN_WIDTH // 2 - 120
-        if 'declare' in valid:
-            w = 160
-            rect = pygame.Rect(x - w // 2, btn_y - btn_h // 2, w, btn_h)
-            buttons['declare'] = {'rect': rect, 'text': 'Declare', 'color': DECLARE_RED, 'hover_color': DECLARE_RED_HOVER, 'font': ui_font}
-            x += 180
-        if 'draw' in valid:
-            w = 140
-            rect = pygame.Rect(x - w // 2, btn_y - btn_h // 2, w, btn_h)
-            buttons['draw'] = {'rect': rect, 'text': 'Draw', 'color': SWAP_GREEN, 'hover_color': SWAP_GREEN_HOVER, 'font': ui_font}
-    elif gm.state == GameState.DECIDE:
-        x = SCREEN_WIDTH // 2 - 400
+    mobile = is_mobile()
+    scale = get_mobile_scale()
+    btn_h = int(48 * scale)
+    spacing = int(8 * scale)
+    margin = 16
+    max_row_w = SCREEN_WIDTH - margin * 2
 
+    # Helper to place buttons with wrapping
+    def _place(button_list):
+        # button_list: [(key, width, text, color, hover_color)]
+        rows = [[]]
+        row_w = 0
+        for item in button_list:
+            key, w, text, color, hover_color = item
+            if rows[-1] and row_w + w + spacing > max_row_w:
+                rows.append([])
+                row_w = 0
+            rows[-1].append(item)
+            row_w += w + spacing
+
+        # Center each row and stack vertically
+        base_y = ACTION_BAR_Y + ACTION_BAR_H // 2
+        total_h = len(rows) * (btn_h + spacing) - spacing
+        for r_idx, row in enumerate(rows):
+            row_width = sum(w for _, w, _, _, _ in row) + spacing * max(0, len(row) - 1)
+            x = (SCREEN_WIDTH - row_width) // 2
+            y = base_y - total_h // 2 + r_idx * (btn_h + spacing)
+            for key, w, text, color, hover_color in row:
+                rect = pygame.Rect(x, y - btn_h // 2, w, btn_h)
+                buttons[key] = {'rect': rect, 'text': text, 'color': color, 'hover_color': hover_color, 'font': ui_font}
+                x += w + spacing
+
+    if gm.state == GameState.TURN_START:
+        items = []
+        if 'declare' in valid:
+            items.append(('declare', int(160 * scale), 'Declare', DECLARE_RED, DECLARE_RED_HOVER))
+        if 'draw' in valid:
+            items.append(('draw', int(140 * scale), 'Draw', SWAP_GREEN, SWAP_GREEN_HOVER))
+        _place(items)
+
+    elif gm.state == GameState.DECIDE:
+        items = []
         if game_settings and game_settings.self_pair_enabled:
             if gm.drawn_card_resolved:
                 pairs = can_self_pair(cp)
                 if pairs:
-                    w = 110
-                    rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-                    buttons['self_pair'] = {'rect': rect, 'text': 'Self-Pair', 'color': SELF_PAIR_COLOR, 'hover_color': SELF_PAIR_HOVER, 'font': ui_font}
-                    x += w + spacing
-
+                    items.append(('self_pair', int(110 * scale), 'Self-Pair', SELF_PAIR_COLOR, SELF_PAIR_HOVER))
         if 'play_power' in valid and gm.drawn_card and gm.drawn_card.power:
             power = gm.drawn_card.power
             label = POWER_LABELS.get(power, 'Power')
-            w = 150
-            rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-            buttons['play_power'] = {'rect': rect, 'text': label, 'color': PEEK_BLUE, 'hover_color': PEEK_BLUE_HOVER, 'font': ui_font}
-            x += w + spacing
+            items.append(('play_power', int(150 * scale), label, PEEK_BLUE, PEEK_BLUE_HOVER))
         if 'swap' in valid:
-            w = 110
-            rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-            buttons['swap'] = {'rect': rect, 'text': 'Swap', 'color': SWAP_GREEN, 'hover_color': SWAP_GREEN_HOVER, 'font': ui_font}
-            x += w + spacing
+            items.append(('swap', int(110 * scale), 'Swap', SWAP_GREEN, SWAP_GREEN_HOVER))
         if 'discard' in valid:
-            w = 120
-            rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-            buttons['discard'] = {'rect': rect, 'text': 'Discard', 'color': DISCARD_ORANGE, 'hover_color': DISCARD_ORANGE_HOVER, 'font': ui_font}
-            x += w + spacing
+            items.append(('discard', int(120 * scale), 'Discard', DISCARD_ORANGE, DISCARD_ORANGE_HOVER))
         if 'pair_own' in valid:
-            w = 130
-            rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-            buttons['pair_own'] = {'rect': rect, 'text': 'Pair Own', 'color': PAIR_TEAL, 'hover_color': PAIR_TEAL_HOVER, 'font': ui_font}
-            x += w + spacing
+            items.append(('pair_own', int(130 * scale), 'Pair Own', PAIR_TEAL, PAIR_TEAL_HOVER))
         if 'pair_opponent' in valid:
-            w = 160
-            rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-            buttons['pair_opponent'] = {'rect': rect, 'text': 'Pair Opponent', 'color': PAIR_TEAL, 'hover_color': PAIR_TEAL_HOVER, 'font': ui_font}
-            x += w + spacing
+            items.append(('pair_opponent', int(160 * scale), 'Pair Opponent', PAIR_TEAL, PAIR_TEAL_HOVER))
         if 'declare' in valid:
-            w = 130
-            rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-            buttons['declare'] = {'rect': rect, 'text': 'Declare', 'color': DECLARE_RED, 'hover_color': DECLARE_RED_HOVER, 'font': ui_font}
+            items.append(('declare', int(130 * scale), 'Declare', DECLARE_RED, DECLARE_RED_HOVER))
+        _place(items)
 
     elif gm.state == GameState.REACTION_WINDOW:
-        x = SCREEN_WIDTH // 2 - 200
+        items = []
         rank = gm.reaction_rank
         label = f"Drop {rank}!"
-        w = 140
-        rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-        buttons['drop_self'] = {'rect': rect, 'text': label, 'color': DROP_MATCH_COLOR, 'hover_color': DROP_MATCH_HOVER, 'font': ui_font}
-        x += w + spacing
-
+        items.append(('drop_self', int(140 * scale), label, DROP_MATCH_COLOR, DROP_MATCH_HOVER))
         if gm.reaction_source_player is not None:
             for opp in gm.players:
                 if opp.seat_index == gm.reaction_source_player or opp.is_human:
                     continue
                 opp_slots = can_call_opponent_card(cp, opp, rank)
                 if opp_slots:
-                    w = 180
-                    rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-                    buttons['drop_opponent'] = {'rect': rect, 'text': f"Call {opp.name}'s {rank}", 'color': PAIR_TEAL, 'hover_color': PAIR_TEAL_HOVER, 'font': ui_font}
-                    x += w + spacing
+                    items.append(('drop_opponent', int(180 * scale), f"Call {opp.name}'s {rank}", PAIR_TEAL, PAIR_TEAL_HOVER))
                     break
-
-        w = 100
-        rect = pygame.Rect(x, btn_y - btn_h // 2, w, btn_h)
-        buttons['pass_reaction'] = {'rect': rect, 'text': 'Pass', 'color': CANCEL_GRAY, 'hover_color': CANCEL_GRAY_HOVER, 'font': ui_font}
+        items.append(('pass_reaction', int(100 * scale), 'Pass', CANCEL_GRAY, CANCEL_GRAY_HOVER))
+        _place(items)
 
     return buttons
 
 
 def _build_cancel_button(text, ui_font):
-    w = 140
-    h = 40
+    scale = get_mobile_scale()
+    w = int(140 * scale)
+    h = int(44 * scale)
     rect = pygame.Rect(SCREEN_WIDTH // 2 - w // 2, ACTION_BAR_Y + ACTION_BAR_H + 2, w, h)
     return {'rect': rect, 'text': text, 'font': ui_font}
 
 
 def _build_shuffle_button(player, seat_position, ui_font):
+    scale = get_mobile_scale()
     px, py = seat_position
-    w = 80
-    h = 28
+    w = int(90 * scale)
+    h = int(36 * scale)
     sx = px - w // 2
-    sy = py + CARD_HEIGHT // 2 + 40
+    sy = py + CARD_HEIGHT // 2 + int(44 * scale)
     rect = pygame.Rect(sx, sy, w, h)
     return {'rect': rect, 'text': 'Shuffle', 'color': SHUFFLE_COLOR, 'hover_color': SHUFFLE_HOVER, 'font': ui_font}
 
@@ -270,6 +268,8 @@ class _ScaledDisplay:
         self._last_browser_size = None
         self._windowed_size = (SCREEN_WIDTH, SCREEN_HEIGHT)
         self.fullscreen = False
+        self._touch_pos = (0, 0)
+        self._touch_pressed = False
         if sys.platform == "emscripten":
             try:
                 import platform as wasm_platform
@@ -291,6 +291,10 @@ class _ScaledDisplay:
         self.window = pygame.display.set_mode((win_w, win_h), pygame.RESIZABLE)
         self.logical = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)).convert()
         self.shake_offset = (0, 0)
+
+    def set_touch(self, logical_pos, pressed):
+        self._touch_pos = logical_pos
+        self._touch_pressed = pressed
 
     def check_wasm_resize(self):
         if sys.platform != "emscripten":
@@ -363,6 +367,28 @@ def _translate_mouse_event(event, display):
                     int(attrs['rel'][1] * SCREEN_HEIGHT / win_h),
                 )
         return pygame.event.Event(event.type, attrs)
+    # Convert finger events to synthetic mouse events for touch support
+    if event.type in (pygame.FINGERDOWN, pygame.FINGERUP, pygame.FINGERMOTION):
+        win_w, win_h = display.window.get_size()
+        if win_w <= 0 or win_h <= 0:
+            return event
+        # event.x and event.y are normalized 0.0-1.0
+        phys_x = int(event.x * win_w)
+        phys_y = int(event.y * win_h)
+        logical_pos = display.to_logical((phys_x, phys_y))
+        display.set_touch(logical_pos, event.type != pygame.FINGERUP)
+        if event.type == pygame.FINGERDOWN:
+            return pygame.event.Event(pygame.MOUSEBUTTONDOWN, {
+                'pos': logical_pos, 'button': 1,
+            })
+        elif event.type == pygame.FINGERUP:
+            return pygame.event.Event(pygame.MOUSEBUTTONUP, {
+                'pos': logical_pos, 'button': 1,
+            })
+        elif event.type == pygame.FINGERMOTION:
+            return pygame.event.Event(pygame.MOUSEMOTION, {
+                'pos': logical_pos, 'rel': (0, 0), 'buttons': (1, 0, 0),
+            })
     return event
 
 
@@ -380,6 +406,10 @@ async def main():
             pass
 
     prof = profile_mod.load()
+    # Auto-bump text scale on mobile for readability
+    if is_mobile() and prof.settings.text_scale < 1.1:
+        prof.settings.text_scale = 1.1
+        theme.apply_text_scale(prof.settings.text_scale)
     theme.set_active(prof.settings.theme)
     theme.apply_text_scale(prof.settings.text_scale)
     theme.apply_motion_scale(prof.settings.motion_scale)
@@ -393,7 +423,13 @@ async def main():
     pygame.display.set_caption("Declare")
 
     _orig_get_pos = pygame.mouse.get_pos
-    pygame.mouse.get_pos = lambda: display.to_logical(_orig_get_pos())
+    def _get_pos_wrapper():
+        # On touch-only devices, return last touch position when mouse isn't moving
+        pos = display.to_logical(_orig_get_pos())
+        if pos == (0, 0) and display._touch_pos != (0, 0):
+            return display._touch_pos
+        return pos
+    pygame.mouse.get_pos = _get_pos_wrapper
 
     clock = pygame.time.Clock()
     toasts = ToastManager()
@@ -537,6 +573,26 @@ async def main():
                 profile_mod.save(prof)
                 running = False
                 break
+
+            if event.type == pygame.APP_WILLENTERBACKGROUND:
+                if current_screen == "game" and game_manager is not None and not paused:
+                    paused = True
+                    pause.reset()
+                    audio.duck(0.35)
+                continue
+
+            if event.type == pygame.APP_DIDENTERFOREGROUND:
+                if paused and current_screen == "game":
+                    paused = False
+                    audio.unduck()
+                continue
+
+            if event.type == pygame.VIDEORESIZE:
+                if sys.platform != "emscripten":
+                    display._windowed_size = (event.w, event.h)
+                    if not display.fullscreen:
+                        display.window = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                continue
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_F1:
                 if access_panel.active:
@@ -1271,11 +1327,19 @@ async def main():
                     if dragging_slot is not None and human_idx is not None:
                         human_player = game_manager.players[human_idx]
                         num_players = len(game_manager.players)
-                        bounds = _player_area_bounds(human_player.seat_index, num_players)
-                        drop_cx = mouse_pos[0] - drag_offset[0]
-                        drop_cy = mouse_pos[1] - drag_offset[1]
-                        clamped = _clamp_to_bounds(drop_cx, drop_cy, bounds)
-                        human_player.card_positions[dragging_slot] = clamped
+                        card_rects = renderer.get_card_rects(human_idx, game_manager)
+                        swapped = False
+                        for target_slot, rect in enumerate(card_rects):
+                            if target_slot != dragging_slot and rect.collidepoint(mouse_pos):
+                                human_player.swap_hand_slots(dragging_slot, target_slot, game_manager.players)
+                                swapped = True
+                                break
+                        if not swapped:
+                            bounds = _player_area_bounds(human_player.seat_index, num_players)
+                            drop_cx = mouse_pos[0] - drag_offset[0]
+                            drop_cy = mouse_pos[1] - drag_offset[1]
+                            clamped = _clamp_to_bounds(drop_cx, drop_cy, bounds)
+                            human_player.card_positions[dragging_slot] = clamped
                         dragging_slot = None
                         renderer.dragging_card = None
                         renderer.drag_pos = None

@@ -18,7 +18,7 @@ from config import (SCREEN_WIDTH, SCREEN_HEIGHT, BG_GREEN, BG_DARK, CARD_WHITE, 
     ANIM_DRAW_DURATION, ANIM_SWAP_DURATION, ANIM_UNSEEN_SWAP_DURATION,
     ANIM_SEEN_SWAP_DURATION, ANIM_PEEK_LIFT_DURATION, ANIM_PAIR_FLY_DURATION,
     ANIM_DISCARD_DURATION, ANIM_NOTIFICATION_DURATION, ANIM_FLASH_DURATION,
-    PLAYER_AREA_2, PLAYER_AREA_3, PLAYER_AREA_4)
+    PLAYER_AREA_2, PLAYER_AREA_3, PLAYER_AREA_4, get_mobile_scale)
 from game.card import Card
 from game.player import Player
 from game.game_manager import GameManager, GameState
@@ -929,41 +929,42 @@ class Renderer:
             return
         if not game_manager.reaction_pending:
             return
-        
+
         rank = game_manager.reaction_rank or "?"
         timer = max(0, game_manager.reaction_timer)
-        
-        banner_h = 70
+
+        scale = get_mobile_scale()
+        banner_h = int(70 * scale)
+        banner_w = min(600, SCREEN_WIDTH - 40)
         banner_y = SCREEN_HEIGHT // 2 - banner_h // 2
         banner_x = SCREEN_WIDTH // 2
-        banner_rect = pygame.Rect(banner_x - 300, banner_y, 600, banner_h)
-        
+        banner_rect = pygame.Rect(banner_x - banner_w // 2, banner_y, banner_w, banner_h)
+
         pulse = abs(math.sin(pygame.time.get_ticks() * 0.005)) * 0.3 + 0.7
         glow_color = (*GOLD, int(200 * pulse))
-        
-        glow_surf = pygame.Surface((620, banner_h + 20), pygame.SRCALPHA)
+
+        glow_surf = pygame.Surface((banner_w + 20, banner_h + 20), pygame.SRCALPHA)
         pygame.draw.rect(glow_surf, glow_color, glow_surf.get_rect(), border_radius=12)
-        screen.blit(glow_surf, (banner_x - 310, banner_y - 10))
-        
+        screen.blit(glow_surf, (banner_x - banner_w // 2 - 10, banner_y - 10))
+
         pygame.draw.rect(screen, (30, 80, 40), banner_rect, border_radius=10)
         pygame.draw.rect(screen, GOLD, banner_rect, 2, border_radius=10)
-        
-        title_font = typo.display_bold(28)
-        body_font = typo.body(20)
-        
+
+        title_font = typo.display_bold(int(28 * scale))
+        body_font = typo.body(int(20 * scale))
+
         title_surf = title_font.render(f"REACT! {rank} was played!", True, GOLD)
         timer_surf = body_font.render(f"{timer:.1f}s remaining", True, TEXT_WHITE)
-        
-        screen.blit(title_surf, (banner_rect.centerx - title_surf.get_width() // 2, banner_rect.y + 12))
-        screen.blit(timer_surf, (banner_rect.centerx - timer_surf.get_width() // 2, banner_rect.y + 42))
-        
-        bar_width = 560
+
+        screen.blit(title_surf, (banner_rect.centerx - title_surf.get_width() // 2, banner_rect.y + int(12 * scale)))
+        screen.blit(timer_surf, (banner_rect.centerx - timer_surf.get_width() // 2, banner_rect.y + int(42 * scale)))
+
+        bar_width = banner_w - 40
         bar_x = banner_rect.x + 20
-        bar_y = banner_rect.y + banner_h - 15
-        full_width = bar_width
+        bar_y = banner_rect.y + banner_h - int(15 * scale)
         remaining = timer / game_manager.settings.reaction_window_seconds
-        pygame.draw.rect(screen, (60, 60, 60), (bar_x, bar_y, bar_width, 6), border_radius=3)
-        pygame.draw.rect(screen, GOLD, (bar_x, bar_y, int(bar_width * remaining), 6), border_radius=3)
+        pygame.draw.rect(screen, (60, 60, 60), (bar_x, bar_y, bar_width, max(4, int(6 * scale))), border_radius=3)
+        pygame.draw.rect(screen, GOLD, (bar_x, bar_y, int(bar_width * remaining), max(4, int(6 * scale))), border_radius=3)
 
     def draw_reaction_result(self, notification_text: str, screen) -> None:
         """Flash a notification for reaction results (wrong card penalty, etc)."""
@@ -1369,17 +1370,25 @@ class Renderer:
     def draw_gear_icon(self, mouse_pos, settings_open=False):
         self._draw_hud_buttons(mouse_pos)
 
+    def _hud_size(self):
+        scale = get_mobile_scale()
+        return int(44 * scale), int(42 * scale)
+
     def get_gear_rect(self):
-        return pygame.Rect(SCREEN_WIDTH - 52, ACTION_BAR_Y + 16, 40, 38)
+        w, h = self._hud_size()
+        return pygame.Rect(SCREEN_WIDTH - w - 12, ACTION_BAR_Y + 16, w, h)
 
     def get_pause_rect(self):
-        return pygame.Rect(SCREEN_WIDTH - 100, ACTION_BAR_Y + 16, 40, 38)
+        w, h = self._hud_size()
+        return pygame.Rect(SCREEN_WIDTH - w * 2 - 24, ACTION_BAR_Y + 16, w, h)
 
     def get_quit_rect(self):
-        return pygame.Rect(SCREEN_WIDTH - 148, ACTION_BAR_Y + 16, 40, 38)
+        w, h = self._hud_size()
+        return pygame.Rect(SCREEN_WIDTH - w * 3 - 36, ACTION_BAR_Y + 16, w, h)
 
     def _draw_hud_buttons(self, mouse_pos):
         th = theme_mod.active()
+        scale = get_mobile_scale()
         for rect, glyph_kind, tooltip in (
             (self.get_quit_rect(),  "x",     "Quit to menu"),
             (self.get_pause_rect(), "pause", "Pause"),
@@ -1392,24 +1401,26 @@ class Renderer:
             cx, cy = rect.center
             color = th.brass_300 if hovered else th.brass_300
             if glyph_kind == "gear":
-                pygame.draw.circle(self.screen, color, (cx, cy), 9, 2)
-                pygame.draw.circle(self.screen, color, (cx, cy), 3)
+                r = int(9 * scale)
+                pygame.draw.circle(self.screen, color, (cx, cy), r, 2)
+                pygame.draw.circle(self.screen, color, (cx, cy), max(2, int(3 * scale)))
                 for k in range(8):
                     a = math.pi * 2 * k / 8
-                    x1 = cx + int(math.cos(a) * 10)
-                    y1 = cy + int(math.sin(a) * 10)
-                    x2 = cx + int(math.cos(a) * 13)
-                    y2 = cy + int(math.sin(a) * 13)
-                    pygame.draw.line(self.screen, color, (x1, y1), (x2, y2), 2)
+                    x1 = cx + int(math.cos(a) * r + 1)
+                    y1 = cy + int(math.sin(a) * r + 1)
+                    x2 = cx + int(math.cos(a) * (r + int(3 * scale)))
+                    y2 = cy + int(math.sin(a) * (r + int(3 * scale)))
+                    pygame.draw.line(self.screen, color, (x1, y1), (x2, y2), max(1, int(2 * scale)))
             elif glyph_kind == "pause":
-                bar_w = 4
-                bar_h = 16
+                bar_w = max(3, int(4 * scale))
+                bar_h = int(16 * scale)
                 pygame.draw.rect(self.screen, color,
-                                 pygame.Rect(cx - 7, cy - bar_h // 2, bar_w, bar_h),
+                                 pygame.Rect(cx - bar_w - 3, cy - bar_h // 2, bar_w, bar_h),
                                  border_radius=1)
                 pygame.draw.rect(self.screen, color,
                                  pygame.Rect(cx + 3, cy - bar_h // 2, bar_w, bar_h),
                                  border_radius=1)
             elif glyph_kind == "x":
-                pygame.draw.line(self.screen, color, (cx - 7, cy - 7), (cx + 7, cy + 7), 2)
-                pygame.draw.line(self.screen, color, (cx + 7, cy - 7), (cx - 7, cy + 7), 2)
+                off = int(7 * scale)
+                pygame.draw.line(self.screen, color, (cx - off, cy - off), (cx + off, cy + off), max(1, int(2 * scale)))
+                pygame.draw.line(self.screen, color, (cx + off, cy - off), (cx - off, cy + off), max(1, int(2 * scale)))

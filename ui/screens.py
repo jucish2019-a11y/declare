@@ -15,7 +15,7 @@ from config import (
     DECK_CENTER, DRAWN_CARD_POS, DISCARD_POS,
     PLAYER_BOTTOM, PLAYER_TOP, PLAYER_LEFT, PLAYER_RIGHT,
     TITLE_FONT_SIZE, SUBTITLE_FONT_SIZE, UI_FONT_SIZE, LOG_FONT_SIZE,
-    SMALL_FONT_SIZE, CARD_FONT_SIZE, CARD_BIG_FONT_SIZE,
+    SMALL_FONT_SIZE, CARD_FONT_SIZE, CARD_BIG_FONT_SIZE, get_mobile_scale,
 )
 
 
@@ -62,9 +62,9 @@ class Button:
         screen.blit(text_surf, text_rect)
 
     def is_clicked(self, mouse_pos):
-        if pygame.mouse.get_pressed()[0] and self.rect.collidepoint(mouse_pos):
-            return True
-        return False
+        # Polling pygame.mouse.get_pressed() doesn't work for touch
+        # Callers should check button-down events against rect instead
+        return self.rect.collidepoint(mouse_pos)
 
     def update_hover(self, mouse_pos):
         self.is_hovered = self.rect.collidepoint(mouse_pos)
@@ -82,15 +82,20 @@ def _get_font(size, bold=False):
 class MenuScreen:
     def __init__(self, screen):
         self.screen = screen
+        scale = get_mobile_scale()
         self.title_font = typo.display_bold(int(TITLE_FONT_SIZE * 1.4))
         self.subtitle_font = typo.header_italic(int(SUBTITLE_FONT_SIZE * 1.1))
-        self.button_font = typo.body_bold(UI_FONT_SIZE)
+        self.button_font = typo.body_bold(int(UI_FONT_SIZE * scale))
         cx = SCREEN_WIDTH // 2
-        self.play_button = Button(cx, 540, 320, 56, "Play", SWAP_GREEN, SWAP_GREEN_HOVER)
-        self.tutorial_button = Button(cx, 605, 320, 48, "Tutorial", PEEK_BLUE, PEEK_BLUE_HOVER)
-        self.how_to_button = Button(cx, 660, 320, 44, "How To Play", PAIR_TEAL, PAIR_TEAL_HOVER)
-        self.profile_button = Button(cx, 712, 320, 44, "Profile & Stats", DISCARD_ORANGE, DISCARD_ORANGE_HOVER)
-        self.quit_button = Button(cx, 770, 320, 44, "Quit", DECLARE_RED, DECLARE_RED_HOVER)
+        bw = int(320 * scale)
+        bh = int(56 * scale)
+        bsp = int(8 * scale)
+        base_y = int(SCREEN_HEIGHT * 0.58)
+        self.play_button = Button(cx, base_y, bw, bh, "Play", SWAP_GREEN, SWAP_GREEN_HOVER)
+        self.tutorial_button = Button(cx, base_y + bh + bsp, bw, int(48 * scale), "Tutorial", PEEK_BLUE, PEEK_BLUE_HOVER)
+        self.how_to_button = Button(cx, base_y + bh + int(48 * scale) + bsp * 2, bw, int(44 * scale), "How To Play", PAIR_TEAL, PAIR_TEAL_HOVER)
+        self.profile_button = Button(cx, base_y + bh + int(48 * scale) + int(44 * scale) + bsp * 3, bw, int(44 * scale), "Profile & Stats", DISCARD_ORANGE, DISCARD_ORANGE_HOVER)
+        self.quit_button = Button(cx, base_y + bh + int(48 * scale) + int(44 * scale) * 2 + bsp * 4, bw, int(44 * scale), "Quit", DECLARE_RED, DECLARE_RED_HOVER)
         self.new_game_button = self.play_button
         self.buttons = [self.play_button, self.tutorial_button, self.how_to_button,
                         self.profile_button, self.quit_button]
@@ -261,10 +266,11 @@ class SetupScreen:
 
     def __init__(self, screen, num_players=2):
         self.screen = screen
+        scale = get_mobile_scale()
         self.title_font = typo.display_bold(int(TITLE_FONT_SIZE * 1.1))
         self.subtitle_font = typo.header_italic(SUBTITLE_FONT_SIZE)
-        self.label_font = typo.body(UI_FONT_SIZE)
-        self.button_font = typo.body_bold(UI_FONT_SIZE)
+        self.label_font = typo.body(int(UI_FONT_SIZE * scale))
+        self.button_font = typo.body_bold(int(UI_FONT_SIZE * scale))
         self.input_font = typo.body(SMALL_FONT_SIZE + 2)
         self.small_font = typo.body(13)
         self.section_font = typo.header_bold(14)
@@ -294,9 +300,9 @@ class SetupScreen:
         self._toggle_rects = {}
         self._name_rects = {}
 
-        self.start_button = Button(SCREEN_WIDTH // 2, 800, 320, 56,
+        self.start_button = Button(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * 0.88), int(320 * scale), int(56 * scale),
                                    "Start Match", SWAP_GREEN, SWAP_GREEN_HOVER)
-        self.back_button = Button(120, 60, 140, 40,
+        self.back_button = Button(120, 60, int(140 * scale), int(40 * scale),
                                   "← Back", DECLARE_RED, DECLARE_RED_HOVER)
 
     def _draw_background(self):
@@ -351,10 +357,10 @@ class SetupScreen:
             ts = self.title_font.render(str(count), True, th.text_white if active else th.text_dim)
             self.screen.blit(ts, ts.get_rect(center=r.center))
 
-        seat_top = 360
+        seat_top = int(SCREEN_HEIGHT * 0.38)
         seat_h = 96
         seat_gap = 12
-        seat_w = 920
+        seat_w = min(920, SCREEN_WIDTH - 40)
         seat_x = SCREEN_WIDTH // 2 - seat_w // 2
         self._diff_rects = {}
         self._toggle_rects = {}
@@ -428,9 +434,10 @@ class SetupScreen:
                                           True, th.you_cyan)
             self.screen.blit(tip, (name_x, y + h - 22))
 
-        toggle_x = x + 380
+        # Responsive layout: place toggle and difficulty based on seat width
+        toggle_w = min(124, max(100, (w - 400) // 3))
+        toggle_x = x + min(380, w - 300)
         toggle_y = y + h // 2 - 16
-        toggle_w = 124
         toggle_h = 32
         toggle_rect = pygame.Rect(toggle_x, toggle_y, toggle_w, toggle_h)
         self._toggle_rects[i] = toggle_rect
@@ -448,13 +455,13 @@ class SetupScreen:
                                    toggle_rect.centery - ts.get_height() // 2))
 
         if not is_human:
-            diff_x = x + 540
+            diff_x = toggle_x + toggle_w + 16
             diff_y = y + h // 2 - 16
             self._diff_rects[i] = {}
             label = self.small_font.render("DIFFICULTY", True, th.brass_300)
             self.screen.blit(label, (diff_x, diff_y - 18))
             for j, diff in enumerate(["easy", "medium", "hard"]):
-                bw_btn = 84
+                bw_btn = min(84, max(60, (w - diff_x - x - 20) // 3 - 4))
                 bh_btn = 32
                 br = pygame.Rect(diff_x + j * (bw_btn + 4), diff_y, bw_btn, bh_btn)
                 self._diff_rects[i][diff] = br
@@ -538,19 +545,20 @@ class SetupScreen:
 class PeekScreen:
     def __init__(self, screen, hand_size: int, peek_count: int, peek_seconds: float):
         self.screen = screen
+        scale = get_mobile_scale()
         self.hand_size = hand_size
         self.peek_count = peek_count
         self.peeking = set(range(hand_size - peek_count, hand_size)) if peek_count > 0 else set()
         self.title_font = typo.display_bold(TITLE_FONT_SIZE)
         self.subtitle_font = typo.header_italic(SUBTITLE_FONT_SIZE)
         self.label_font = typo.body(UI_FONT_SIZE)
-        self.button_font = typo.body_bold(UI_FONT_SIZE)
+        self.button_font = typo.body_bold(int(UI_FONT_SIZE * scale))
         self.card_font = typo.header_bold(CARD_FONT_SIZE)
         self.small_font = typo.body(SMALL_FONT_SIZE)
         self.max_time = peek_seconds
         self.elapsed = 0.0
         self.revealed = True
-        self.done_button = Button(SCREEN_WIDTH // 2, 720, 320, 56, "I've Memorized - Continue",
+        self.done_button = Button(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * 0.78), int(320 * scale), int(56 * scale), "I've Memorized - Continue",
                                    SWAP_GREEN, SWAP_GREEN_HOVER)
 
     def _draw_background(self):
@@ -617,12 +625,12 @@ class PeekScreen:
             self.done_button.draw(self.screen, self.button_font)
             return
 
-        card_w = int(CARD_WIDTH * 1.6)
-        card_h = int(CARD_HEIGHT * 1.6)
+        card_w = int(min(CARD_WIDTH * 1.6, (SCREEN_WIDTH - 80) // max(1, self.hand_size) - 20))
+        card_h = int(card_w * 1.4)
         gap = 28
         total_width = card_w * self.hand_size + gap * (self.hand_size - 1)
         start_x = (SCREEN_WIDTH - total_width) // 2
-        card_y = 380
+        card_y = int(SCREEN_HEIGHT * 0.40)
 
         slot_label_font = typo.body_bold(14)
         peek_tag_font = typo.body_bold(12)
@@ -722,16 +730,20 @@ class PeekScreen:
 class GameOverScreen:
     def __init__(self, screen):
         self.screen = screen
+        scale = get_mobile_scale()
         self.title_font = typo.display_bold(int(TITLE_FONT_SIZE * 1.4))
         self.banner_font = typo.header_italic(int(SUBTITLE_FONT_SIZE * 1.05))
         self.name_font = typo.header_bold(int(UI_FONT_SIZE * 1.1))
         self.label_font = typo.body(UI_FONT_SIZE)
-        self.button_font = typo.body_bold(UI_FONT_SIZE)
+        self.button_font = typo.body_bold(int(UI_FONT_SIZE * scale))
         self.score_font = typo.display_bold(int(UI_FONT_SIZE * 1.4))
         self.small_font = typo.body(SMALL_FONT_SIZE)
-        self.play_again_button = Button(SCREEN_WIDTH // 2 - 160, 800, 280, 52, "Play Again",
+        bw = int(280 * scale)
+        bh = int(52 * scale)
+        by = int(SCREEN_HEIGHT * 0.88)
+        self.play_again_button = Button(SCREEN_WIDTH // 2 - bw // 2 - 10, by, bw, bh, "Play Again",
                                         SWAP_GREEN, SWAP_GREEN_HOVER)
-        self.menu_button = Button(SCREEN_WIDTH // 2 + 160, 800, 280, 52, "Main Menu",
+        self.menu_button = Button(SCREEN_WIDTH // 2 + bw // 2 + 10, by, bw, bh, "Main Menu",
                                   DECLARE_RED, DECLARE_RED_HOVER)
         self.buttons = [self.play_again_button, self.menu_button]
         self._bg_cache = None

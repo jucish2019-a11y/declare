@@ -27,27 +27,57 @@ from config import (
     PEEK_PHASE_OPTIONS, PEEK_PHASE_LABELS,
     HAND_SIZE_OPTIONS, HAND_SIZE_LABELS,
     REACTION_WINDOW_OPTIONS, REACTION_WINDOW_LABELS,
-    PEEK_COUNT_OPTIONS, PEEK_COUNT_LABELS,
+    PEEK_COUNT_OPTIONS, PEEK_COUNT_LABELS, get_mobile_scale,
 )
 
 
 class SettingsMenu:
-    PANEL_W = 980
-    PANEL_H = 680
-    PANEL_X = (SCREEN_WIDTH - PANEL_W) // 2
-    PANEL_Y = (SCREEN_HEIGHT - PANEL_H) // 2
-
-    GEAR_X = SCREEN_WIDTH - 52
-    GEAR_Y = 8
-    GEAR_W = 40
-    GEAR_H = 34
-
-    TAB_W = 165
-    TAB_H = 44
-    TAB_BAR_Y = 84
-
     AMBER = (220, 175, 60)
     AMBER_HI = (245, 200, 80)
+
+    @property
+    def PANEL_W(self):
+        return min(980, SCREEN_WIDTH - 32)
+
+    @property
+    def PANEL_H(self):
+        return min(680, SCREEN_HEIGHT - 32)
+
+    @property
+    def PANEL_X(self):
+        return (SCREEN_WIDTH - self.PANEL_W) // 2
+
+    @property
+    def PANEL_Y(self):
+        return (SCREEN_HEIGHT - self.PANEL_H) // 2
+
+    @property
+    def GEAR_X(self):
+        return SCREEN_WIDTH - int(52 * get_mobile_scale())
+
+    @property
+    def GEAR_Y(self):
+        return 8
+
+    @property
+    def GEAR_W(self):
+        return int(40 * get_mobile_scale())
+
+    @property
+    def GEAR_H(self):
+        return int(34 * get_mobile_scale())
+
+    @property
+    def TAB_W(self):
+        return min(165, self.PANEL_W // len(self.TABS))
+
+    @property
+    def TAB_H(self):
+        return int(44 * get_mobile_scale())
+
+    @property
+    def TAB_BAR_Y(self):
+        return 84
 
     TABS = [
         ("display",        "Display"),
@@ -61,12 +91,13 @@ class SettingsMenu:
     def __init__(self, screen):
         self.screen = screen
         self.tab = "display"
-        self.font = typo.body(UI_FONT_SIZE)
-        self.small_font = typo.body(SMALL_FONT_SIZE)
-        self.tab_font = typo.body_bold(UI_FONT_SIZE - 1)
-        self.title_font = typo.display_bold(32)
-        self.section_font = typo.body_bold(14)
-        self.label_font = typo.body(16)
+        scale = get_mobile_scale()
+        self.font = typo.body(int(UI_FONT_SIZE * scale))
+        self.small_font = typo.body(int(SMALL_FONT_SIZE * scale))
+        self.tab_font = typo.body_bold(int((UI_FONT_SIZE - 1) * scale))
+        self.title_font = typo.display_bold(int(32 * scale))
+        self.section_font = typo.body_bold(int(14 * scale))
+        self.label_font = typo.body(int(16 * scale))
 
         self._hit = []
         self._tab_rects = {}

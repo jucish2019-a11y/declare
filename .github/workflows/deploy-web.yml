@@ -32,7 +32,7 @@ jobs:
 
       - name: Build web demo
         run: |
-          python -m pygbag --build --title "Declare" --app-id "com.declare.cardgame" .
+          python -m pygbag --build . --title "Declare" --app_name "com.declare.cardgame"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -33,7 +33,7 @@ jobs:
 
       - name: Build web demo
         run: |
-          python -m pygbag --build --title "Declare" --ume_block 0 .
+          python -m pygbag --build --title "Declare" --ume_block 0 --width 1600 --height 900 .
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -16,8 +16,20 @@ from config import (
     DISCARD_ORANGE, DISCARD_ORANGE_HOVER, PAIR_TEAL, PAIR_TEAL_HOVER,
     DECLARE_RED, DECLARE_RED_HOVER, CANCEL_GRAY, CANCEL_GRAY_HOVER,
     SELF_PAIR_COLOR, SELF_PAIR_HOVER,
-    UI_FONT_SIZE, POWER_LABELS,
+    UI_FONT_SIZE, POWER_LABELS, FONT_PATHS,
 )
+import os
+
+
+def _load_font(role, size, bold=False):
+    import pygame
+    path = FONT_PATHS.get(role + '_bold' if bold and role + '_bold' in FONT_PATHS else role, '')
+    if path and os.path.exists(path):
+        try:
+            return pygame.font.Font(path, size)
+        except Exception:
+            pass
+    return pygame.font.SysFont("arial", size, bold=bold)
 from game.card import Card, Deck
 from game.player import HumanPlayer, AIPlayer
 from game.rules import RulesEngine, can_declare
@@ -481,7 +493,7 @@ class TutorialDirector:
         return None
 
     def _get_tutorial_buttons(self):
-        ui_font = pygame.font.SysFont("arial", UI_FONT_SIZE)
+        ui_font = _load_font('ui', UI_FONT_SIZE)
         buttons = {}
         cp = self._game_manager.current_player()
         from game.rules import get_valid_actions
@@ -662,7 +674,7 @@ class TutorialDirector:
         start_x = PLAYER_BOTTOM[0] - total_width // 2
         start_y = PLAYER_BOTTOM[1] - CARD_HEIGHT // 2 + 4
         self._peek_card_rects = []
-        peek_tag_font = pygame.font.SysFont("arial", 11)
+        peek_tag_font = _load_font('ui', 11)
         for slot in range(hand_size):
             x = start_x + slot * CARD_SPREAD
             y = start_y

@@ -25,6 +25,7 @@ from config import (
     ANIM_NOTIFICATION_DURATION, CARD_GRID_SPACING_X, CARD_GRID_SPACING_Y,
     ANIM_SHUFFLE_DURATION, ANIM_REACTIVE_DROP_DURATION, ANIM_PENALTY_DRAW_DURATION,
     AI_REACTION_DELAY,
+    FONT_PATHS,
 )
 from game.game_manager import GameManager, GameState
 from game.player import HumanPlayer
@@ -266,12 +267,15 @@ def _clamp_to_bounds(cx, cy, bounds):
 
 class _ScaledDisplay:
     def __init__(self):
-        info = pygame.display.Info()
-        max_w = max(800, info.current_w - 80)
-        max_h = max(600, info.current_h - 160)
-        scale = min(max_w / SCREEN_WIDTH, max_h / SCREEN_HEIGHT, 1.0)
-        win_w = max(640, int(SCREEN_WIDTH * scale))
-        win_h = max(360, int(SCREEN_HEIGHT * scale))
+        if sys.platform == "emscripten":
+            win_w, win_h = SCREEN_WIDTH, SCREEN_HEIGHT
+        else:
+            info = pygame.display.Info()
+            max_w = max(800, info.current_w - 80)
+            max_h = max(600, info.current_h - 160)
+            scale = min(max_w / SCREEN_WIDTH, max_h / SCREEN_HEIGHT, 1.0)
+            win_w = max(640, int(SCREEN_WIDTH * scale))
+            win_h = max(360, int(SCREEN_HEIGHT * scale))
         self.window = pygame.display.set_mode((win_w, win_h), pygame.RESIZABLE)
         self.logical = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)).convert()
         self.shake_offset = (0, 0)
@@ -329,6 +333,13 @@ async def main():
     pygame.init()
     audio.init()
 
+    if sys.platform == "emscripten":
+        try:
+            import platform as wasm_platform
+            wasm_platform.window.canvas.style.imageRendering = "crisp-edges"
+        except Exception:
+            pass
+
     prof = profile_mod.load()
     theme.set_active(prof.settings.theme)
     theme.apply_text_scale(prof.settings.text_scale)
@@ -366,8 +377,17 @@ async def main():
     last_human_action = {}
     declare_hold_until = 0.0
 
-    ui_font = pygame.font.SysFont("arial", UI_FONT_SIZE)
-    small_font = pygame.font.SysFont("arial", SMALL_FONT_SIZE)
+    def _load_font(role, size, bold=False):
+        path = FONT_PATHS.get(role + '_bold' if bold and role + '_bold' in FONT_PATHS else role, '')
+        if path and os.path.exists(path):
+            try:
+                return pygame.font.Font(path, size)
+            except Exception:
+                pass
+        return pygame.font.SysFont("arial", size, bold=bold)
+
+    ui_font = _load_font('ui', UI_FONT_SIZE)
+    small_font = _load_font('ui', SMALL_FONT_SIZE)
 
     game_manager = None
     current_screen = "menu"
@@ -1505,7 +1525,7 @@ async def main():
                     screen.blit(text_surf, text_rect)
 
                 if game_manager.state == GameState.REACTION_WINDOW:
-                    font = pygame.font.SysFont("arial", 28, bold=True)
+                    font = _load_font('ui', 28, bold=True)
                     remaining = max(0, game_manager.reaction_timer)
                     banner_text = f"REACTION! Drop a {game_manager.reaction_rank}? ({remaining:.1f}s)"
                     banner_surf = font.render(banner_text, True, GOLD)
@@ -1540,7 +1560,7 @@ async def main():
         if current_screen == "game" and game_settings.streamer_mode:
             stream_cover = pygame.Surface((SCREEN_WIDTH, 220), pygame.SRCALPHA)
             stream_cover.fill((0, 0, 0, 220))
-            label_font = pygame.font.SysFont("arial", 22, bold=True)
+            label_font = _load_font('ui', 22, bold=True)
             label = label_font.render("STREAM-SAFE - Hand hidden", True, (200, 200, 200))
             stream_cover.blit(label, (24, 96))
             screen.blit(stream_cover, (0, SCREEN_HEIGHT - 220))

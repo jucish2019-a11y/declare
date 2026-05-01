@@ -24,6 +24,7 @@ from config import (
     ANIM_SEEN_SWAP_DURATION, ANIM_DISCARD_DURATION, ANIM_PAIR_FLY_DURATION,
     ANIM_NOTIFICATION_DURATION, CARD_GRID_SPACING_X, CARD_GRID_SPACING_Y,
     ANIM_SHUFFLE_DURATION, ANIM_REACTIVE_DROP_DURATION, ANIM_PENALTY_DRAW_DURATION,
+    AI_REACTION_DELAY,
 )
 from game.game_manager import GameManager, GameState
 from game.player import HumanPlayer
@@ -1231,8 +1232,11 @@ async def main():
                 human_can = _can_human_react(game_manager)
                 if renderer.is_animating():
                     pass
-                elif human_can:
+                elif human_can and game_manager.reaction_elapsed < AI_REACTION_DELAY:
                     pass
+                elif game_manager.reaction_ai_resolved:
+                    if not renderer.is_animating():
+                        game_manager.end_reaction_window()
                 else:
                     _process_reaction_ai_resolve(game_manager, renderer)
                     if game_manager.reaction_ai_resolved or game_manager.reaction_responded:

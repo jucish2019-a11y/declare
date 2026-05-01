@@ -271,7 +271,7 @@ function show_infobox() {
             -webkit-user-select: none;
         }
 
-        #rotate {
+        #rotate-overlay {
             display: none;
             position: fixed;
             top: 0; left: 0;
@@ -279,14 +279,41 @@ function show_infobox() {
             background: #0e1f18;
             color: #e8c36e;
             font-family: 'Inter', 'Segoe UI', sans-serif;
-            font-size: 20px;
             text-align: center;
             align-items: center;
             justify-content: center;
-            z-index: 9999;
+            flex-direction: column;
+            z-index: 999999;
         }
-        @media (orientation: portrait) and (max-width: 600px) {
-            #rotate { display: flex; }
+        #rotate-overlay .rotate-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            animation: rotate-phone 2s ease-in-out infinite;
+        }
+        #rotate-overlay .rotate-text {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            padding: 0 24px;
+        }
+        #rotate-overlay .rotate-sub {
+            font-size: 15px;
+            color: #8a9a82;
+            margin-bottom: 32px;
+            padding: 0 32px;
+        }
+        #rotate-overlay .rotate-continue {
+            background: transparent;
+            color: #5a6a52;
+            border: 1px solid #3a4a32;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        @keyframes rotate-phone {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(90deg); }
         }
 
         html, body {
@@ -344,7 +371,12 @@ function show_infobox() {
 </head>
 
 <body>
-    <div id="rotate">Please rotate your device to landscape for the best experience.</div>
+    <div id="rotate-overlay">
+        <div class="rotate-icon">📱</div>
+        <div class="rotate-text">Rotate your device to landscape</div>
+        <div class="rotate-sub">This game is best played in landscape mode</div>
+        <button class="rotate-continue" onclick="_dismiss_rotate()">Continue Anyway</button>
+    </div>
 
     <div id="transfer" align=center>
 <!--        <div class="spinner" id='spinner'></div> -->
@@ -450,6 +482,38 @@ frameborder="1"
         window._vh = vh;
     }
 
+    let _rotate_dismissed = false;
+    function _is_portrait() {
+        // Use window.orientation when available (iOS Safari supports this)
+        if (typeof window.orientation !== 'undefined') {
+            return window.orientation === 0 || window.orientation === 180;
+        }
+        // Fallback for modern browsers
+        return window.innerWidth < window.innerHeight;
+    }
+    function _check_orientation() {
+        if (_rotate_dismissed) return;
+        const overlay = document.getElementById('rotate-overlay');
+        const canvas = document.getElementById('canvas');
+        if (!overlay || !canvas) return;
+        if (_is_portrait()) {
+            overlay.style.display = 'flex';
+            canvas.style.display = 'none';
+        } else {
+            overlay.style.display = 'none';
+            canvas.style.display = 'block';
+        }
+    }
+    function _dismiss_rotate() {
+        _rotate_dismissed = true;
+        const overlay = document.getElementById('rotate-overlay');
+        const canvas = document.getElementById('canvas');
+        if (overlay) overlay.style.display = 'none';
+        if (canvas) canvas.style.display = 'block';
+    }
+    window.addEventListener('resize', _check_orientation);
+    window.addEventListener('orientationchange', _check_orientation);
+
     async function custom_onload(debug_hidden) {
         // this is called before anything python is loaded
         // make your js customization here
@@ -468,6 +532,7 @@ frameborder="1"
         }
 
         _dpr_setup();
+        _check_orientation();
 
         show_infobox()
     }

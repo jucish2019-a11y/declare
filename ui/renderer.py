@@ -29,7 +29,7 @@ import theme as theme_mod
 import typography as typo
 
 SEAT_POSITIONS_2 = {0: PLAYER_BOTTOM, 1: PLAYER_TOP}
-SEAT_POSITIONS_3 = {0: PLAYER_BOTTOM, 1: (420, 200), 2: (1180, 200)}
+SEAT_POSITIONS_3 = {0: PLAYER_BOTTOM, 1: (672, 320), 2: (1888, 320)}
 SEAT_POSITIONS_4 = {0: PLAYER_BOTTOM, 1: PLAYER_LEFT, 2: PLAYER_TOP, 3: PLAYER_RIGHT}
 
 
@@ -157,7 +157,7 @@ class Renderer:
         out.fill(th.felt_rim)
 
         center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-        rx, ry = 700, 380
+        rx, ry = 1120, 608
 
         radial = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         for layer in range(40, 0, -1):
@@ -565,22 +565,22 @@ class Renderer:
             self._draw_area_outline(bounds)
 
         name_color = GOLD if is_current else TEXT_WHITE
-        raw_name_y = card_positions[0][1] - CARD_HEIGHT // 2 - 50 if card_positions else py - 70
+        raw_name_y = card_positions[0][1] - CARD_HEIGHT // 2 - 80 if card_positions else py - 112
         _, y_min, _, y_max = bounds
-        name_y = max(y_min + 20, min(raw_name_y, y_max - CARD_HEIGHT - 60))
+        name_y = max(y_min + 32, min(raw_name_y, y_max - CARD_HEIGHT - 96))
         name_surf = self.ui_font.render(player.name, True, name_color)
         name_rect = name_surf.get_rect(center=(px, name_y))
         if is_current:
             alpha = int(80 + 40 * math.sin(self._pulse_time * 3))
-            glow_rect = name_rect.inflate(24, 12)
+            glow_rect = name_rect.inflate(38, 19)
             glow_surf = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
             pygame.draw.rect(glow_surf, (*GOLD, alpha), glow_surf.get_rect(), border_radius=8)
             self.screen.blit(glow_surf, glow_rect.topleft)
         pill_surf = pygame.Surface((name_rect.width + 32, name_rect.height + 16), pygame.SRCALPHA)
         pygame.draw.rect(pill_surf, (*BG_DARK, 180), pill_surf.get_rect(), border_radius=8)
-        self.screen.blit(pill_surf, (name_rect.centerx - name_rect.width // 2 - 16, name_rect.centery - name_rect.height // 2 - 8))
+        self.screen.blit(pill_surf, (name_rect.centerx - name_rect.width // 2 - 26, name_rect.centery - name_rect.height // 2 - 13))
         self.screen.blit(name_surf, name_rect)
-        info_y = name_y + name_surf.get_height() + 4
+        info_y = name_y + name_surf.get_height() + 6
         if is_human:
             info_text = f"Cards: {player.card_count}"
         else:
@@ -813,19 +813,19 @@ class Renderer:
         self.screen.blit(panel_surf, (LOG_PANEL_X, LOG_PANEL_Y))
         pygame.draw.rect(self.screen, PANEL_BORDER, panel_rect, 1, border_radius=4)
         header_surf = self.ui_font.render("Game Log", True, GOLD)
-        self.screen.blit(header_surf, (LOG_PANEL_X + 8, LOG_PANEL_Y + 6))
-        pygame.draw.line(self.screen, PANEL_BORDER, (LOG_PANEL_X + 4, LOG_PANEL_Y + 30), (LOG_PANEL_X + LOG_PANEL_W - 4, LOG_PANEL_Y + 30))
+        self.screen.blit(header_surf, (LOG_PANEL_X + 13, LOG_PANEL_Y + 10))
+        pygame.draw.line(self.screen, PANEL_BORDER, (LOG_PANEL_X + 6, LOG_PANEL_Y + 48), (LOG_PANEL_X + LOG_PANEL_W - 6, LOG_PANEL_Y + 48))
         if not log_entries:
             return
         visible = log_entries[-10:]
         for i, entry in enumerate(visible):
             text = str(entry)
-            if len(text) > 35:
-                text = text[:32] + "..."
+            if len(text) > 56:
+                text = text[:53] + "..."
             if isinstance(entry, dict):
-                text = str(entry.get('text', entry))[:35]
+                text = str(entry.get('text', entry))[:56]
             entry_surf = self.log_font.render(text, True, TEXT_WHITE)
-            self.screen.blit(entry_surf, (LOG_PANEL_X + 8, LOG_PANEL_Y + 36 + i * 22))
+            self.screen.blit(entry_surf, (LOG_PANEL_X + 13, LOG_PANEL_Y + 58 + i * 35))
 
     def draw_action_buttons(self, action_buttons):
         th = theme_mod.active()
@@ -975,7 +975,7 @@ class Renderer:
         overlay.fill((0, 0, 0, 120))
         screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 500, 100
+        box_w, box_h = 800, 160
         box_rect = pygame.Rect(SCREEN_WIDTH // 2 - box_w // 2, SCREEN_HEIGHT // 2 - box_h // 2, box_w, box_h)
         pygame.draw.rect(screen, (50, 10, 10), box_rect, border_radius=12)
         pygame.draw.rect(screen, (200, 50, 50), box_rect, 2, border_radius=12)

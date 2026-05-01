@@ -1684,12 +1684,12 @@ async def main():
         if current_screen == "game":
             screen.blit(vignette.get(0.45), (0, 0))
         if current_screen == "game" and game_settings.streamer_mode:
-            stream_cover = pygame.Surface((SCREEN_WIDTH, 220), pygame.SRCALPHA)
+            stream_cover = pygame.Surface((SCREEN_WIDTH, 352), pygame.SRCALPHA)
             stream_cover.fill((0, 0, 0, 220))
-            label_font = _load_font('ui', 22, bold=True)
+            label_font = _load_font('ui', 35, bold=True)
             label = label_font.render("STREAM-SAFE - Hand hidden", True, (200, 200, 200))
-            stream_cover.blit(label, (24, 96))
-            screen.blit(stream_cover, (0, SCREEN_HEIGHT - 220))
+            stream_cover.blit(label, (38, 154))
+            screen.blit(stream_cover, (0, SCREEN_HEIGHT - 352))
         if game_settings.captions:
             captions.draw(screen)
         toasts.draw(screen)
@@ -1768,7 +1768,7 @@ def _finalize_game_stats(prof, gm, result, meta, game_start_time, toasts, partic
         rec = prof.achievements.get(key, {})
         title = rec.get("title", key)
         toasts.push(f"Achievement: {title}", kind="achievement", icon="★", life=4.0)
-        particles.burst_achievement(960, 540)
+        particles.burst_achievement(1536, 864)
         audio.play("achievement")
         queue.append(key)
 
@@ -1788,9 +1788,9 @@ def _react_to_log_entry(entry, particles, toasts, gm, renderer,
     try:
         from config import DECK_CENTER, DRAWN_CARD_POS, DISCARD_POS
     except ImportError:
-        DECK_CENTER = (640, 400)
-        DRAWN_CARD_POS = (860, 400)
-        DISCARD_POS = (750, 400)
+        DECK_CENTER = (1024, 640)
+        DRAWN_CARD_POS = (1376, 640)
+        DISCARD_POS = (1200, 640)
 
     if "drew" in low and "as penalty" not in low:
         audio.play("draw"); cap("draw")
@@ -1821,16 +1821,16 @@ def _react_to_log_entry(entry, particles, toasts, gm, renderer,
     elif "declared" in low or "declares" in low:
         audio.play("declare"); cap("declare")
         toasts.push("Declared!", kind="warn", icon="!", life=2.6)
-        particles.burst_declare(960, 540)
+        particles.burst_declare(1536, 864)
         if cam: cam.kick(amp=4.0, duration=0.45, freq=18)
-        if edge_flash: edge_flash.fire(duration=0.9, thickness=36)
+        if edge_flash: edge_flash.fire(duration=0.9, thickness=58)
         if timewarp: timewarp.slowmo(factor=0.45, duration=1.4)
     elif "wrong card" in low or "penalty" in low:
         audio.play("wrong_react"); cap("wrong_react")
-        particles.burst_penalty(960, 540)
+        particles.burst_penalty(1536, 864)
         if cam: cam.kick(amp=4.5, duration=0.30, freq=28)
         if edge_flash:
-            edge_flash.fire(color=(212, 72, 72), duration=0.5, thickness=24)
+            edge_flash.fire(color=(212, 72, 72), duration=0.5, thickness=38)
     elif "reaction" in low and ("opens" in low or "begins" in low or "window" in low):
         audio.play("react_open"); cap("react_open")
         if edge_flash: edge_flash.fire(duration=0.6, thickness=28)

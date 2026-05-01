@@ -202,15 +202,15 @@ class MenuScreen:
             r = t_surf.get_rect(center=(SCREEN_WIDTH // 2 + offset, 160 + offset))
             self.screen.blit(t_surf, r)
 
-        flourish_y = 212
-        line_w = 220
+        flourish_y = 339
+        line_w = 352
         cx = SCREEN_WIDTH // 2
         pygame.draw.line(self.screen, th.brass_500, (cx - line_w, flourish_y),
-                         (cx - 30, flourish_y), 1)
-        pygame.draw.line(self.screen, th.brass_500, (cx + 30, flourish_y),
+                         (cx - 48, flourish_y), 1)
+        pygame.draw.line(self.screen, th.brass_500, (cx + 48, flourish_y),
                          (cx + line_w, flourish_y), 1)
         pygame.draw.polygon(self.screen, th.brass_500,
-                            [(cx, flourish_y - 5), (cx - 12, flourish_y), (cx, flourish_y + 5), (cx + 12, flourish_y)])
+                            [(cx, flourish_y - 8), (cx - 19, flourish_y), (cx, flourish_y + 8), (cx + 19, flourish_y)])
 
         subtitle_surf = self.subtitle_font.render("A Card Game of Memory & Strategy",
                                                    True, th.text_dim)
@@ -335,15 +335,15 @@ class SetupScreen:
 
         sub = self.subtitle_font.render("Choose your seats - name yourself, set opponents.",
                                           True, th.text_dim)
-        self.screen.blit(sub, sub.get_rect(center=(SCREEN_WIDTH // 2, 154)))
+        self.screen.blit(sub, sub.get_rect(center=(SCREEN_WIDTH // 2, 246)))
 
-        cy = 210
+        cy = 336
         sec = self.section_font.render("NUMBER OF PLAYERS", True, th.brass_300)
         self.screen.blit(sec, sec.get_rect(center=(SCREEN_WIDTH // 2, cy)))
-        cy += 30
+        cy += 48
         self.player_count_rects = {}
-        bw, bh = 90, 50
-        spacing = 14
+        bw, bh = 144, 80
+        spacing = 22
         total_w = bw * 3 + spacing * 2
         start_x = SCREEN_WIDTH // 2 - total_w // 2
         for idx, count in enumerate([2, 3, 4]):
@@ -358,9 +358,9 @@ class SetupScreen:
             self.screen.blit(ts, ts.get_rect(center=r.center))
 
         seat_top = int(SCREEN_HEIGHT * 0.38)
-        seat_h = 96
-        seat_gap = 12
-        seat_w = min(920, SCREEN_WIDTH - 40)
+        seat_h = 154
+        seat_gap = 19
+        seat_w = min(1472, SCREEN_WIDTH - 64)
         seat_x = SCREEN_WIDTH // 2 - seat_w // 2
         self._diff_rects = {}
         self._toggle_rects = {}
@@ -376,40 +376,40 @@ class SetupScreen:
         config = self.players_config[i]
         is_human = config["is_human"]
 
-        shadow = pygame.Surface((w + 8, h + 8), pygame.SRCALPHA)
-        pygame.draw.rect(shadow, (0, 0, 0, 120), (4, 6, w, h), border_radius=12)
-        self.screen.blit(shadow, (x - 4, y))
+        shadow = pygame.Surface((w + 13, h + 13), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, (0, 0, 0, 120), (6, 10, w, h), border_radius=12)
+        self.screen.blit(shadow, (x - 6, y))
 
         card = pygame.Surface((w, h), pygame.SRCALPHA)
         bg_color = (28, 38, 32, 240) if is_human else (28, 32, 42, 240)
         pygame.draw.rect(card, bg_color, card.get_rect(), border_radius=12)
-        accent_w = 6
+        accent_w = 10
         accent_color = th.you_cyan if is_human else th.brass_500
         pygame.draw.rect(card, accent_color, pygame.Rect(0, 0, accent_w, h),
                          border_top_left_radius=12, border_bottom_left_radius=12)
         pygame.draw.rect(card, th.brass_700, card.get_rect(), 1, border_radius=12)
         self.screen.blit(card, (x, y))
 
-        avatar_x = x + 38
+        avatar_x = x + 61
         avatar_y = y + h // 2
         if is_human:
-            pygame.draw.circle(self.screen, (40, 90, 100), (avatar_x, avatar_y), 26)
-            pygame.draw.circle(self.screen, th.you_cyan, (avatar_x, avatar_y), 26, 2)
+            pygame.draw.circle(self.screen, (40, 90, 100), (avatar_x, avatar_y), 42)
+            pygame.draw.circle(self.screen, th.you_cyan, (avatar_x, avatar_y), 42, 2)
         else:
-            pygame.draw.circle(self.screen, (60, 50, 30), (avatar_x, avatar_y), 26)
-            pygame.draw.circle(self.screen, th.brass_300, (avatar_x, avatar_y), 26, 2)
-        initial_font = typo.header_bold(26)
+            pygame.draw.circle(self.screen, (60, 50, 30), (avatar_x, avatar_y), 42)
+            pygame.draw.circle(self.screen, th.brass_300, (avatar_x, avatar_y), 42, 2)
+        initial_font = typo.header_bold(42)
         initial = initial_font.render(config["name"][0].upper() if config["name"] else "?",
                                        True, th.text_white)
         self.screen.blit(initial, initial.get_rect(center=(avatar_x, avatar_y)))
 
         seat_label = self.small_font.render(f"SEAT {i + 1}", True, th.brass_300)
-        self.screen.blit(seat_label, (x + 78, y + 16))
+        self.screen.blit(seat_label, (x + 125, y + 26))
 
-        name_x = x + 78
-        name_y = y + 32
-        name_w = 260
-        name_h = 32
+        name_x = x + 125
+        name_y = y + 51
+        name_w = 416
+        name_h = 51
         name_rect = pygame.Rect(name_x, name_y, name_w, name_h)
         self._name_rects[i] = name_rect
         focus = (self.active_input == i)
@@ -417,53 +417,53 @@ class SetupScreen:
         pygame.draw.rect(self.screen, th.brass_300 if focus else (140, 130, 100),
                          name_rect, 2, border_radius=6)
         n_surf = self.input_font.render(config["name"], True, (30, 30, 30))
-        self.screen.blit(n_surf, (name_rect.x + 10, name_rect.y + 7))
+        self.screen.blit(n_surf, (name_rect.x + 16, name_rect.y + 11))
         if focus:
-            cursor_x = name_rect.x + 10 + n_surf.get_width() + 1
+            cursor_x = name_rect.x + 16 + n_surf.get_width() + 1
             if (pygame.time.get_ticks() // 500) % 2 == 0:
                 pygame.draw.line(self.screen, (30, 30, 30),
-                                 (cursor_x, name_rect.y + 6),
-                                 (cursor_x, name_rect.y + name_rect.height - 6), 2)
+                                 (cursor_x, name_rect.y + 10),
+                                 (cursor_x, name_rect.y + name_rect.height - 10), 2)
 
         if not is_human and config.get("quip"):
             quip = self.small_font.render(config["quip"], True, th.text_dim)
-            self.screen.blit(quip, (name_x, y + h - 22))
+            self.screen.blit(quip, (name_x, y + h - 35))
 
         if is_human:
             tip = self.small_font.render("Click name to edit  ·  This is you",
                                           True, th.you_cyan)
-            self.screen.blit(tip, (name_x, y + h - 22))
+            self.screen.blit(tip, (name_x, y + h - 35))
 
         # Responsive layout: place toggle and difficulty based on seat width
-        toggle_w = min(124, max(100, (w - 400) // 3))
-        toggle_x = x + min(380, w - 300)
-        toggle_y = y + h // 2 - 16
-        toggle_h = 32
+        toggle_w = min(198, max(160, (w - 640) // 3))
+        toggle_x = x + min(608, w - 480)
+        toggle_y = y + h // 2 - 26
+        toggle_h = 51
         toggle_rect = pygame.Rect(toggle_x, toggle_y, toggle_w, toggle_h)
         self._toggle_rects[i] = toggle_rect
         toggle_color = (60, 130, 90) if is_human else (60, 100, 160)
         pygame.draw.rect(self.screen, toggle_color, toggle_rect, border_radius=16)
         pygame.draw.rect(self.screen, th.brass_500, toggle_rect, 1, border_radius=16)
-        knob_x = toggle_rect.right - 16 if is_human else toggle_rect.x + 16
-        pygame.draw.circle(self.screen, th.text_white, (knob_x, toggle_rect.centery), 12)
+        knob_x = toggle_rect.right - 26 if is_human else toggle_rect.x + 26
+        pygame.draw.circle(self.screen, th.text_white, (knob_x, toggle_rect.centery), 19)
         label_txt = "Human" if is_human else "AI"
         ts = self.small_font.render(label_txt, True, th.text_white)
         if is_human:
-            self.screen.blit(ts, (toggle_rect.x + 14, toggle_rect.centery - ts.get_height() // 2))
+            self.screen.blit(ts, (toggle_rect.x + 22, toggle_rect.centery - ts.get_height() // 2))
         else:
-            self.screen.blit(ts, (toggle_rect.right - 14 - ts.get_width(),
+            self.screen.blit(ts, (toggle_rect.right - 22 - ts.get_width(),
                                    toggle_rect.centery - ts.get_height() // 2))
 
         if not is_human:
-            diff_x = toggle_x + toggle_w + 16
-            diff_y = y + h // 2 - 16
+            diff_x = toggle_x + toggle_w + 26
+            diff_y = y + h // 2 - 26
             self._diff_rects[i] = {}
             label = self.small_font.render("DIFFICULTY", True, th.brass_300)
-            self.screen.blit(label, (diff_x, diff_y - 18))
+            self.screen.blit(label, (diff_x, diff_y - 29))
             for j, diff in enumerate(["easy", "medium", "hard"]):
-                bw_btn = min(84, max(60, (w - diff_x - x - 20) // 3 - 4))
-                bh_btn = 32
-                br = pygame.Rect(diff_x + j * (bw_btn + 4), diff_y, bw_btn, bh_btn)
+                bw_btn = min(134, max(96, (w - diff_x - x - 32) // 3 - 6))
+                bh_btn = 51
+                br = pygame.Rect(diff_x + j * (bw_btn + 6), diff_y, bw_btn, bh_btn)
                 self._diff_rects[i][diff] = br
                 active = (config["difficulty"] == diff)
                 color = th.brass_500 if active else (50, 50, 50)
@@ -587,34 +587,34 @@ class PeekScreen:
             )
             t_surf.set_alpha(alpha)
             self.screen.blit(t_surf, t_surf.get_rect(center=(SCREEN_WIDTH // 2 + offset,
-                                                               110 + offset)))
+                                                                176 + offset)))
 
         if self.peek_count == 0:
             sub = self.subtitle_font.render(
                 "No cards to peek this round - go in blind.", True, th.text_dim)
-            self.screen.blit(sub, sub.get_rect(center=(SCREEN_WIDTH // 2, 180)))
+            self.screen.blit(sub, sub.get_rect(center=(SCREEN_WIDTH // 2, 288)))
         else:
             sub = self.subtitle_font.render(
                 f"Memorize your bottom {self.peek_count} card{'s' if self.peek_count > 1 else ''} - "
                 "they vanish when the timer runs out.",
                 True, th.text_dim,
             )
-            self.screen.blit(sub, sub.get_rect(center=(SCREEN_WIDTH // 2, 180)))
+            self.screen.blit(sub, sub.get_rect(center=(SCREEN_WIDTH // 2, 288)))
 
         remaining = max(0.0, 1.0 - self.elapsed / max(0.001, self.max_time))
-        cx, cy = SCREEN_WIDTH // 2, 290
-        radius = 38
+        cx, cy = SCREEN_WIDTH // 2, 464
+        radius = 61
         pygame.draw.circle(self.screen, (*th.panel_bg, ), (cx, cy), radius)
         pygame.draw.circle(self.screen, th.brass_700, (cx, cy), radius, 1)
         if remaining > 0:
             arc_color = th.brass_300 if remaining > 0.4 else th.signal_warn
-            self._draw_arc(cx, cy, radius - 6, remaining, arc_color)
+            self._draw_arc(cx, cy, radius - 10, remaining, arc_color)
         secs_left = max(0.0, self.max_time - self.elapsed)
         if self.max_time >= 900:
             time_label = "INF"
         else:
             time_label = f"{secs_left:0.1f}s"
-        secs_surf = typo.body_bold(16).render(time_label, True, th.text_white)
+        secs_surf = typo.body_bold(26).render(time_label, True, th.text_white)
         self.screen.blit(secs_surf, secs_surf.get_rect(center=(cx, cy)))
 
         if game_manager is None:
@@ -625,48 +625,48 @@ class PeekScreen:
             self.done_button.draw(self.screen, self.button_font)
             return
 
-        card_w = int(min(CARD_WIDTH * 1.6, (SCREEN_WIDTH - 80) // max(1, self.hand_size) - 20))
+        card_w = int(min(CARD_WIDTH * 1.6, (SCREEN_WIDTH - 128) // max(1, self.hand_size) - 32))
         card_h = int(card_w * 1.4)
-        gap = 28
+        gap = 45
         total_width = card_w * self.hand_size + gap * (self.hand_size - 1)
         start_x = (SCREEN_WIDTH - total_width) // 2
         card_y = int(SCREEN_HEIGHT * 0.40)
 
-        slot_label_font = typo.body_bold(14)
-        peek_tag_font = typo.body_bold(12)
+        slot_label_font = typo.body_bold(22)
+        peek_tag_font = typo.body_bold(19)
 
         for slot_idx in range(self.hand_size):
             x = start_x + slot_idx * (card_w + gap)
             card = human.hand[slot_idx]
             is_peek_slot = slot_idx in self.peeking and self.revealed
 
-            shadow = pygame.Surface((card_w + 14, card_h + 18), pygame.SRCALPHA)
+            shadow = pygame.Surface((card_w + 22, card_h + 29), pygame.SRCALPHA)
             pygame.draw.rect(shadow, (0, 0, 0, 130),
-                             (7, 10, card_w, card_h), border_radius=12)
-            self.screen.blit(shadow, (x - 7, card_y))
+                             (11, 16, card_w, card_h), border_radius=12)
+            self.screen.blit(shadow, (x - 11, card_y))
 
             if card is None:
                 empty = pygame.Rect(x, card_y, card_w, card_h)
                 pygame.draw.rect(self.screen, (*th.felt_rim, ), empty, border_radius=12)
                 pygame.draw.rect(self.screen, th.brass_700, empty, 2, border_radius=12)
-                dash_font = typo.header(28)
+                dash_font = typo.header(45)
                 dash = dash_font.render("-", True, th.text_muted)
                 self.screen.blit(dash, dash.get_rect(center=empty.center))
             elif is_peek_slot:
                 face = card_render.paint_face(card, card_w, card_h)
-                glow_size = (card_w + 24, card_h + 24)
+                glow_size = (card_w + 38, card_h + 38)
                 glow = pygame.Surface(glow_size, pygame.SRCALPHA)
                 t_phase = pygame.time.get_ticks() / 1000.0
                 pulse = 0.6 + 0.4 * abs((t_phase * 1.4) % 2 - 1)
                 glow_alpha = int(140 * pulse * (0.5 + 0.5 * remaining))
                 pygame.draw.rect(glow, (*th.brass_300, glow_alpha),
                                  glow.get_rect(), border_radius=18)
-                self.screen.blit(glow, (x - 12, card_y - 12),
+                self.screen.blit(glow, (x - 19, card_y - 19),
                                  special_flags=pygame.BLEND_RGBA_ADD)
                 self.screen.blit(face, (x, card_y))
 
-                tag_w, tag_h = 64, 22
-                tag_rect = pygame.Rect(x + card_w - tag_w - 6, card_y + 6,
+                tag_w, tag_h = 102, 35
+                tag_rect = pygame.Rect(x + card_w - tag_w - 10, card_y + 10,
                                        tag_w, tag_h)
                 pygame.draw.rect(self.screen, th.brass_300, tag_rect, border_radius=11)
                 tag_text = peek_tag_font.render("PEEKED", True, th.brass_900)
@@ -684,14 +684,14 @@ class PeekScreen:
             label = slot_label_font.render(f"SEAT SLOT {slot_idx + 1}",
                                             True, th.brass_300)
             self.screen.blit(label, label.get_rect(center=(x + card_w // 2,
-                                                             card_y + card_h + 22)))
+                                                             card_y + card_h + 35)))
 
         tip = self.small_font.render(
             "When the timer ends, your peeked cards flip back. Click anywhere to skip ahead.",
             True, th.text_dim,
         )
         self.screen.blit(tip, tip.get_rect(center=(SCREEN_WIDTH // 2,
-                                                     card_y + card_h + 60)))
+                                                     card_y + card_h + 96)))
 
         self.done_button.draw(self.screen, self.button_font)
 
@@ -759,7 +759,7 @@ class GameOverScreen:
             b = int(th.felt_rim[2] * (1 - t * 0.4) + th.felt_deep[2] * t * 0.6)
             pygame.draw.line(bg, (r, g, b), (0, i), (SCREEN_WIDTH, i))
         center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-        rx, ry = 760, 420
+        rx, ry = 1216, 672
         pygame.draw.ellipse(bg, th.brass_700,
                             pygame.Rect(center[0] - rx, center[1] - ry, rx * 2, ry * 2), 1)
         pygame.draw.ellipse(bg, th.brass_900,
@@ -779,21 +779,21 @@ class GameOverScreen:
             r = t_surf.get_rect(center=(SCREEN_WIDTH // 2 + offset, 90 + offset))
             self.screen.blit(t_surf, r)
 
-        flourish_y = 152
+        flourish_y = 243
         cx = SCREEN_WIDTH // 2
-        line_w = 240
+        line_w = 384
         pygame.draw.line(self.screen, th.brass_500, (cx - line_w, flourish_y),
-                         (cx - 30, flourish_y), 1)
-        pygame.draw.line(self.screen, th.brass_500, (cx + 30, flourish_y),
+                         (cx - 48, flourish_y), 1)
+        pygame.draw.line(self.screen, th.brass_500, (cx + 48, flourish_y),
                          (cx + line_w, flourish_y), 1)
         pygame.draw.polygon(self.screen, th.brass_500,
-                            [(cx, flourish_y - 5), (cx - 12, flourish_y),
-                             (cx, flourish_y + 5), (cx + 12, flourish_y)])
+                            [(cx, flourish_y - 8), (cx - 19, flourish_y),
+                             (cx, flourish_y + 8), (cx + 19, flourish_y)])
 
         banner_surf = self.banner_font.render(banner_text, True, banner_color)
-        banner_rect = banner_surf.get_rect(center=(SCREEN_WIDTH // 2, 188))
-        chip_w = banner_rect.width + 56
-        chip_h = banner_rect.height + 18
+        banner_rect = banner_surf.get_rect(center=(SCREEN_WIDTH // 2, 301))
+        chip_w = banner_rect.width + 90
+        chip_h = banner_rect.height + 29
         chip = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
         pygame.draw.rect(chip, (15, 15, 15, 200), chip.get_rect(),
                          border_radius=chip_h // 2)
@@ -810,13 +810,13 @@ class GameOverScreen:
         th = theme_mod.active()
 
         panel_w = max(420, hand_size * (CARD_WIDTH + 16) + 80)
-        panel_h = CARD_HEIGHT + 200
+        panel_h = CARD_HEIGHT + 320
         panel_rect = pygame.Rect(x_center - panel_w // 2, top_y, panel_w, panel_h)
 
-        shadow = pygame.Surface((panel_w + 12, panel_h + 12), pygame.SRCALPHA)
-        pygame.draw.rect(shadow, (0, 0, 0, 120), (6, 8, panel_w, panel_h),
+        shadow = pygame.Surface((panel_w + 19, panel_h + 19), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, (0, 0, 0, 120), (10, 13, panel_w, panel_h),
                          border_radius=14)
-        self.screen.blit(shadow, (panel_rect.x - 6, panel_rect.y + 4))
+        self.screen.blit(shadow, (panel_rect.x - 10, panel_rect.y + 6))
 
         panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
         for i in range(panel_h):
@@ -836,15 +836,15 @@ class GameOverScreen:
                          1, border_radius=12)
 
         if is_winner:
-            crown_y = panel_rect.top - 14
+            crown_y = panel_rect.top - 22
             pts = [
-                (x_center - 18, crown_y + 14),
-                (x_center - 14, crown_y),
-                (x_center - 7, crown_y + 8),
-                (x_center, crown_y - 4),
-                (x_center + 7, crown_y + 8),
-                (x_center + 14, crown_y),
-                (x_center + 18, crown_y + 14),
+                (x_center - 29, crown_y + 22),
+                (x_center - 22, crown_y),
+                (x_center - 11, crown_y + 13),
+                (x_center, crown_y - 6),
+                (x_center + 11, crown_y + 13),
+                (x_center + 22, crown_y),
+                (x_center + 29, crown_y + 22),
             ]
             pygame.draw.polygon(self.screen, th.brass_300, pts)
             pygame.draw.polygon(self.screen, th.brass_700, pts, 2)
@@ -852,29 +852,29 @@ class GameOverScreen:
         name_color = th.brass_300 if is_winner else th.text_white
         name_surf = self.name_font.render(player.name, True, name_color)
         self.screen.blit(name_surf, name_surf.get_rect(
-            center=(x_center, panel_rect.top + 32)))
+            center=(x_center, panel_rect.top + 51)))
 
         score_label = self.small_font.render("SCORE", True, th.text_dim)
         self.screen.blit(score_label, score_label.get_rect(
-            center=(x_center, panel_rect.top + 60)))
+            center=(x_center, panel_rect.top + 96)))
         score_color = th.brass_300 if is_winner else th.text_white
         score_surf = self.score_font.render(str(score_val), True, score_color)
         self.screen.blit(score_surf, score_surf.get_rect(
-            center=(x_center, panel_rect.top + 90)))
+            center=(x_center, panel_rect.top + 144)))
 
-        gap = 12
+        gap = 19
         total_w = hand_size * CARD_WIDTH + (hand_size - 1) * gap
         cards_x = x_center - total_w // 2
-        cards_y = panel_rect.top + 130
+        cards_y = panel_rect.top + 208
         for slot_idx in range(hand_size):
             card = player.hand[slot_idx]
             cx = cards_x + slot_idx * (CARD_WIDTH + gap)
-            shadow_card = pygame.Surface((CARD_WIDTH + 8, CARD_HEIGHT + 8),
+            shadow_card = pygame.Surface((CARD_WIDTH + 13, CARD_HEIGHT + 13),
                                           pygame.SRCALPHA)
             pygame.draw.rect(shadow_card, (0, 0, 0, 120),
-                             (4, 6, CARD_WIDTH, CARD_HEIGHT),
+                             (6, 10, CARD_WIDTH, CARD_HEIGHT),
                              border_radius=CORNER_RADIUS)
-            self.screen.blit(shadow_card, (cx - 4, cards_y - 4))
+            self.screen.blit(shadow_card, (cx - 6, cards_y - 6))
             if card is not None:
                 face = card_render.paint_face(card, CARD_WIDTH, CARD_HEIGHT)
                 self.screen.blit(face, (cx, cards_y))

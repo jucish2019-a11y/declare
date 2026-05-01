@@ -49,6 +49,52 @@ from access_panel import AccessibilityPanel
 import daily
 
 
+def _can_human_react(gm):
+    for p in gm.players:
+        if not p.is_human:
+            continue
+        if can_react_to_discard(p, gm.reaction_rank):
+            return True
+        for other in gm.players:
+            if other == p:
+                continue
+            if can_call_opponent_card(p, other, gm.reaction_rank):
+                return True
+    return False
+
+
+def _process_reaction_ai_resolve(gm, renderer):
+    if gm.reaction_ai_resolved:
+        return
+    gm.reaction_ai_resolved = True
+    for ai_p in gm.players:
+        if ai_p.is_human:
+            continue
+        if gm.reaction_responded:
+            break
+        ai_decider = AIDecider(ai_p, {'players': gm.players})
+        if gm.reaction_rank:
+            reaction = ai_decider.should_react_to_discard(gm.reaction_rank)
+            if reaction:
+                if reaction['type'] == 'react_drop_self':
+                    result = gm.attempt_reactive_drop_self(ai_p.seat_index, reaction['slot'])
+                    if result.get('success'):
+                        pos = renderer.get_card_center(ai_p.seat_index, reaction['slot'], gm)
+                        renderer.push_ai_pair_animation(gm, pos)
+                        gm.check_game_over()
+                elif reaction['type'] == 'react_drop_opponent':
+                    result = gm.attempt_reactive_drop_opponent(
+                        ai_p.seat_index,
+                        reaction['opponent_index'],
+                        reaction['opponent_slot'],
+                        reaction['give_slot'],
+                    )
+                    if result.get('success'):
+                        opp_pos = renderer.get_card_center(reaction['opponent_index'], reaction['opponent_slot'], gm)
+                        renderer.push_ai_pair_animation(gm, opp_pos)
+                        gm.check_game_over()
+
+
 def _should_offer_self_pair(gm, game_settings):
     if not gm.drawn_card_resolved:
         return False
@@ -390,6 +436,15 @@ async def main():
 
         if game_manager and not paused:
             game_manager.update(dt)
+
+        if game_manager and game_manager.state == GameState.REACTION_WINDOW and game_manager._reaction_timer_expired:
+            game_manager._reaction_timer_expired = False
+            if _can_human_react(game_manager) and not game_manager.reaction_responded:
+                _process_reaction_ai_resolve(game_manager, renderer)
+            game_manager.end_reaction_window()
+            if turn_end_timer <= 0:
+                turn_end_timer = 0.01
+
         if not paused:
             renderer.update(dt * time_scale)
 
@@ -855,9 +910,12 @@ async def main():
                             status_message = "Click YOUR card to give in exchange"
 
                         elif clicked_btn == 'pass_reaction' and game_manager.state == GameState.REACTION_WINDOW:
+                            _process_reaction_ai_resolve(game_manager, renderer)
                             game_manager.end_reaction_window()
                             awaiting = None
                             status_message = ""
+                            if turn_end_timer <= 0:
+                                turn_end_timer = 0.01
 
                     else:
                         if awaiting is not None:
@@ -1170,41 +1228,16 @@ async def main():
             cp = game_manager.current_player()
 
             if game_manager.state == GameState.REACTION_WINDOW and not cp.is_human:
+                human_can = _can_human_react(game_manager)
                 if renderer.is_animating():
                     pass
+                elif human_can:
+                    pass
                 else:
-                    all_responded = True
-                    for ai_p in game_manager.players:
-                        if ai_p.is_human:
-                            continue
-                        if game_manager.reaction_responded:
-                            break
-                        ai_decider = AIDecider(ai_p, {'players': game_manager.players})
-                        if game_manager.reaction_rank:
-                            reaction = ai_decider.should_react_to_discard(game_manager.reaction_rank)
-                            if reaction:
-                                all_responded = False
-                                if reaction['type'] == 'react_drop_self':
-                                    result = game_manager.attempt_reactive_drop_self(ai_p.seat_index, reaction['slot'])
-                                    if result.get('success'):
-                                        pos = renderer.get_card_center(ai_p.seat_index, reaction['slot'], game_manager)
-                                        renderer.push_ai_pair_animation(game_manager, pos)
-                                        game_manager.check_game_over()
-                                elif reaction['type'] == 'react_drop_opponent':
-                                    result = game_manager.attempt_reactive_drop_opponent(
-                                        ai_p.seat_index,
-                                        reaction['opponent_index'],
-                                        reaction['opponent_slot'],
-                                        reaction['give_slot'],
-                                    )
-                                    if result.get('success'):
-                                        opp_pos = renderer.get_card_center(reaction['opponent_index'], reaction['opponent_slot'], game_manager)
-                                        renderer.push_ai_pair_animation(game_manager, opp_pos)
-                                        game_manager.check_game_over()
-                    if not game_manager.reaction_responded and not renderer.is_animating():
-                        game_manager.end_reaction_window()
-                    elif game_manager.reaction_responded and not renderer.is_animating():
-                        game_manager.end_reaction_window()
+                    _process_reaction_ai_resolve(game_manager, renderer)
+                    if game_manager.reaction_ai_resolved or game_manager.reaction_responded:
+                        if not renderer.is_animating():
+                            game_manager.end_reaction_window()
 
             elif not cp.is_human and turn_end_timer <= 0 and game_manager.state != GameState.REACTION_WINDOW:
                 if renderer.is_animating():

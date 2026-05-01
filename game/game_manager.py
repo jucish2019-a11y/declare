@@ -70,6 +70,8 @@ class GameManager:
         self.reaction_pending: bool = False
         self.reaction_resolved: bool = False
         self.reaction_result_callback: Callable | None = None
+        self.reaction_ai_resolved: bool = False
+        self._reaction_timer_expired: bool = False
 
         self._last_action_rank: str | None = None
         self._last_action_type: str | None = None
@@ -229,6 +231,11 @@ class GameManager:
         self.reaction_source_player = source_player_index
         self.reaction_timer = self.settings.reaction_window_seconds if hasattr(self.settings, 'reaction_window_seconds') else DEFAULT_REACTION_WINDOW_SECONDS
         self.reaction_responded = False
+        self.reaction_ai_resolved = False
+        self._reaction_timer_expired = False
+        self.state = GameState.REACTION_WINDOW
+        return True
+        self._reaction_timer_expired = False
         self.reaction_card_discarded = discarded_card
         self.reaction_pending = True
         self.reaction_resolved = False
@@ -287,6 +294,8 @@ class GameManager:
         self.reaction_card_discarded = None
         self.reaction_pending = False
         self.reaction_resolved = True
+        self.reaction_ai_resolved = False
+        self._reaction_timer_expired = False
         if self.reaction_result_callback:
             cb = self.reaction_result_callback
             self.reaction_result_callback = None
@@ -402,7 +411,7 @@ class GameManager:
         if self.state == GameState.REACTION_WINDOW:
             self.reaction_timer -= dt
             if self.reaction_timer <= 0:
-                self.end_reaction_window()
+                self._reaction_timer_expired = True
 
     def can_self_pair_after_draw(self) -> bool:
         if not self.drawn_card_resolved:

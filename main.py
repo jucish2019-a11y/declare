@@ -267,8 +267,17 @@ def _clamp_to_bounds(cx, cy, bounds):
 
 class _ScaledDisplay:
     def __init__(self):
+        self._last_browser_size = None
         if sys.platform == "emscripten":
-            win_w, win_h = SCREEN_WIDTH, SCREEN_HEIGHT
+            try:
+                import platform as wasm_platform
+                bw, bh = wasm_platform.window.innerWidth, wasm_platform.window.innerHeight
+                self._last_browser_size = (bw, bh)
+                scale = min(bw / SCREEN_WIDTH, bh / SCREEN_HEIGHT)
+                win_w = max(640, int(SCREEN_WIDTH * scale))
+                win_h = max(360, int(SCREEN_HEIGHT * scale))
+            except Exception:
+                win_w, win_h = SCREEN_WIDTH, SCREEN_HEIGHT
         else:
             info = pygame.display.Info()
             max_w = max(800, info.current_w - 80)
@@ -279,6 +288,23 @@ class _ScaledDisplay:
         self.window = pygame.display.set_mode((win_w, win_h), pygame.RESIZABLE)
         self.logical = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)).convert()
         self.shake_offset = (0, 0)
+
+    def check_wasm_resize(self):
+        if sys.platform != "emscripten":
+            return
+        try:
+            import platform as wasm_platform
+            bw, bh = wasm_platform.window.innerWidth, wasm_platform.window.innerHeight
+            if self._last_browser_size is not None and (bw, bh) == self._last_browser_size:
+                return
+            self._last_browser_size = (bw, bh)
+            scale = min(bw / SCREEN_WIDTH, bh / SCREEN_HEIGHT)
+            new_w = max(640, int(SCREEN_WIDTH * scale))
+            new_h = max(360, int(SCREEN_HEIGHT * scale))
+            if (new_w, new_h) != self.window.get_size():
+                self.window = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
+        except Exception:
+            pass
 
     def to_logical(self, pos):
         win_w, win_h = self.window.get_size()
@@ -436,6 +462,7 @@ async def main():
     while running:
         await asyncio.sleep(0)
         dt = clock.tick(FPS) / 1000.0
+        display.check_wasm_resize()
         mouse_pos = pygame.mouse.get_pos()
 
         audio.update(dt)

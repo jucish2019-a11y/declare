@@ -460,6 +460,16 @@ class SettingsMenu:
                          (self.PANEL_X + self.PANEL_W - 30, y + s.get_height() // 2 + 1), 1)
         return y + s.get_height() + 12
 
+    # Width of the label column (relative to row x). Labels are left-aligned
+    # so all rows share the same starting x, and the control strip begins at
+    # a fixed offset — keeps the form visually aligned on both sides.
+    _LABEL_COL_W = 320
+    _LABEL_GAP = 28
+    _ROW_H = 38
+    _ROW_GAP = 10
+    _BTN_H = 34
+    _BTN_GAP = 8
+
     def _row(self, x, y, label, options, current, action, content_right=None):
         """Draw a labeled row of pill-buttons. Returns next y."""
         th = theme_mod.active()
@@ -467,11 +477,17 @@ class SettingsMenu:
             content_right = self.PANEL_X + self.PANEL_W - 30
 
         l = self.label_font.render(label + ":", True, th.text_white)
-        self.screen.blit(l, (x, y + 8))
-        ctrl_x = x + 170
+        ctrl_x = x + self._LABEL_COL_W + self._LABEL_GAP
+        # Vertically center the label against the button row.
+        label_y = y + (self._BTN_H - l.get_height()) // 2
+        self.screen.blit(l, (x, label_y))
         avail_w = max(80, content_right - ctrl_x)
-        bh = 32
-        bw = max(64, min(120, (avail_w - (len(options) - 1) * 8) // max(1, len(options))))
+        bh = self._BTN_H
+        # Per-option width is bounded so 2-option rows don't sprawl across the
+        # whole panel — keeps ON/OFF visually similar in size to 3-option rows.
+        n = max(1, len(options))
+        per_cap = 132 if n <= 2 else 116
+        bw = max(72, min(per_cap, (avail_w - (n - 1) * self._BTN_GAP) // n))
 
         for value, text in options:
             r = pygame.Rect(ctrl_x, y, bw, bh)
@@ -510,8 +526,8 @@ class SettingsMenu:
             ts = self.small_font.render(str(text), True, txt_color)
             self.screen.blit(ts, ts.get_rect(center=r.center))
             self._hit.append((action, r, value))
-            ctrl_x += bw + 8
-        return y + bh + 12
+            ctrl_x += bw + self._BTN_GAP
+        return y + bh + self._ROW_GAP
 
     def _matches(self, candidate, current):
         if isinstance(candidate, float) and isinstance(current, float):
@@ -538,7 +554,7 @@ class SettingsMenu:
         y += 8
         y = self._section(lx, y, "Atmosphere")
         y = self._row(lx, y, "Lamp & Vignette", [(True, "ON"), (False, "OFF")],
-                      getattr(gs, 'atmospheric_lighting', True),
+                      getattr(gs, 'atmospheric_lighting', False),
                       "atmospheric_lighting", rx)
 
     def _draw_gameplay(self, lx, y, rx, gs, gm=None):
@@ -771,12 +787,22 @@ class SettingsMenu:
             ("Current Streak", str(s.current_win_streak)),
             ("Longest Streak", str(s.longest_win_streak)),
         ]
+        value_x = lx + self._LABEL_COL_W + self._LABEL_GAP
+        line_h = self.label_font.get_height() + 6
         for label, value in rows:
             l = self.label_font.render(label + ":", True, TEXT_DIM)
             self.screen.blit(l, (lx, y))
             v = self.label_font.render(value, True, TEXT_WHITE)
-            self.screen.blit(v, (lx + 200, y))
-            y += 24
+            self.screen.blit(v, (value_x, y))
+            y += line_h
+
+        y += 12
+        y = self._section(lx, y, "Tutorial")
+        complete = "Yes" if prof.tutorial_complete else "No"
+        l = self.label_font.render("Tutorial Complete:", True, TEXT_DIM)
+        self.screen.blit(l, (lx, y))
+        v = self.label_font.render(complete, True, TEXT_WHITE)
+        self.screen.blit(v, (value_x, y))
 
     # Legacy aliases for backward compatibility.
     def _draw_access(self, lx, y, rx, gs):

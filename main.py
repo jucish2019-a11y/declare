@@ -325,38 +325,29 @@ class _ScaledDisplay:
         except Exception:
             pass
 
-    def _game_rect(self):
-        """Return the (x, y, w, h) of the actual game area within the window,
-        accounting for letterbox / pillarbox bars."""
+    def canvas_rect(self):
+        """Return (offset_x, offset_y, target_w, target_h) for the centered
+        2560x1440 canvas inside the current window, scaled uniformly to fit
+        without distortion. Used by present() and to_logical()."""
         win_w, win_h = self.window.get_size()
         if win_w <= 0 or win_h <= 0:
             return (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-        if (win_w, win_h) == (SCREEN_WIDTH, SCREEN_HEIGHT):
-            return (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-        target_ratio = SCREEN_WIDTH / SCREEN_HEIGHT
-        win_ratio = win_w / max(1, win_h)
-        if win_ratio > target_ratio:
-            new_h = win_h
-            new_w = int(win_h * target_ratio)
-        else:
-            new_w = win_w
-            new_h = int(win_w / target_ratio)
-        new_w = max(1, new_w)
-        new_h = max(1, new_h)
-        return ((win_w - new_w) // 2, (win_h - new_h) // 2, new_w, new_h)
+        s = min(win_w / SCREEN_WIDTH, win_h / SCREEN_HEIGHT)
+        tw = max(1, int(SCREEN_WIDTH * s))
+        th = max(1, int(SCREEN_HEIGHT * s))
+        ox = (win_w - tw) // 2
+        oy = (win_h - th) // 2
+        return (ox, oy, tw, th)
 
     def to_logical(self, pos):
-        win_w, win_h = self.window.get_size()
-        if win_w <= 0 or win_h <= 0:
+        ox, oy, tw, th = self.canvas_rect()
+        if tw <= 0 or th <= 0:
             return pos
-        gx, gy, gw, gh = self._game_rect()
-        # Clamp to game rect and map to logical coordinates
-        lx = max(0, min(pos[0] - gx, gw))
-        ly = max(0, min(pos[1] - gy, gh))
-        return (
-            int(lx * SCREEN_WIDTH / gw),
-            int(ly * SCREEN_HEIGHT / gh),
-        )
+        lx = int((pos[0] - ox) * SCREEN_WIDTH / tw)
+        ly = int((pos[1] - oy) * SCREEN_HEIGHT / th)
+        lx = max(0, min(SCREEN_WIDTH - 1, lx))
+        ly = max(0, min(SCREEN_HEIGHT - 1, ly))
+        return (lx, ly)
 
     def toggle_fullscreen(self):
         if sys.platform == "emscripten":
@@ -371,26 +362,32 @@ class _ScaledDisplay:
     def set_shake(self, offset):
         self.shake_offset = offset
 
-    def present(self):
-        win_size = self.window.get_size()
-        ox, oy = self.shake_offset
-        if ox or oy:
+    def present(self, frame_mode="menu"):
+        win_w, win_h = self.window.get_size()
+        ox, oy, tw, th = self.canvas_rect()
+
+        sx, sy = self.shake_offset
+        if sx or sy:
             shaken = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
             shaken.fill((0, 0, 0))
-            shaken.blit(self.logical, (ox, oy))
+            shaken.blit(self.logical, (sx, sy))
             source = shaken
         else:
             source = self.logical
 
-        if win_size == (SCREEN_WIDTH, SCREEN_HEIGHT):
-            self.window.blit(source, (0, 0))
+        # Paint the letterbox bars when the window aspect doesn't match 2560x1440.
+        if (tw, th) != (win_w, win_h):
+            if frame_mode == "felt":
+                from ui.renderer import get_felt_texture
+                self.window.blit(get_felt_texture((win_w, win_h)), (0, 0))
+            else:
+                from ui.screens import get_menu_bg_texture
+                self.window.blit(get_menu_bg_texture((win_w, win_h)), (0, 0))
+
+        if (tw, th) == (SCREEN_WIDTH, SCREEN_HEIGHT):
+            self.window.blit(source, (ox, oy))
         else:
-            # Letterbox / pillarbox to preserve 16:9 aspect ratio
-            gx, gy, gw, gh = self._game_rect()
-            scaled = pygame.transform.smoothscale(source, (gw, gh))
-            # Clear window to black first to fill the letterbox bars
-            self.window.fill((0, 0, 0))
-            self.window.blit(scaled, (gx, gy))
+            self.window.blit(pygame.transform.smoothscale(source, (tw, th)), (ox, oy))
         pygame.display.flip()
 
 
@@ -400,11 +397,11 @@ def _translate_mouse_event(event, display):
         attrs = dict(event.__dict__)
         attrs['pos'] = new_pos
         if event.type == pygame.MOUSEMOTION and 'rel' in attrs:
-            _, _, gw, gh = display._game_rect()
-            if gw > 0 and gh > 0:
+            _, _, tw, th = display.canvas_rect()
+            if tw > 0 and th > 0:
                 attrs['rel'] = (
-                    int(attrs['rel'][0] * SCREEN_WIDTH / gw),
-                    int(attrs['rel'][1] * SCREEN_HEIGHT / gh),
+                    int(attrs['rel'][0] * SCREEN_WIDTH / tw),
+                    int(attrs['rel'][1] * SCREEN_HEIGHT / th),
                 )
         return pygame.event.Event(event.type, attrs)
     # Convert finger events to synthetic mouse events for touch support
@@ -520,6 +517,7 @@ async def main():
 
     renderer = Renderer(screen)
     renderer.set_game_settings(game_settings)
+    renderer.set_back_style(getattr(prof.settings, "equipped_card_back", "classic"))
     menu_screen = MenuScreen(screen)
     setup_screen = SetupScreen(screen)
     peek_screen = PeekScreen(screen, game_settings.hand_size, game_settings.peek_count, game_settings.peek_phase_seconds)
@@ -570,7 +568,7 @@ async def main():
             if current_screen == "game" and game_manager is not None:
                 if (theme.active().particles_enabled
                         and theme.active().motion_scale > 0.1
-                        and getattr(game_settings, 'atmospheric_lighting', True)
+                        and getattr(game_settings, 'atmospheric_lighting', False)
                         and getattr(theme.active(), 'is_atmospheric', True)):
                     particles.ambient_parlor_motes(
                         SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
@@ -823,7 +821,9 @@ async def main():
 
             elif current_screen == "profile":
                 action = profile_screen.handle_event(event, prof)
-                if action == "back":
+                if action == "back_changed":
+                    renderer.set_back_style(prof.settings.equipped_card_back)
+                elif action == "back":
                     current_screen = "menu"
 
             elif current_screen == "how_to_play":
@@ -1684,7 +1684,7 @@ async def main():
         # display preference AND the active theme's `is_atmospheric` flag.
         # Minimal theme reports is_atmospheric=False so it stays flat.
         atmo_active = (
-            getattr(game_settings, 'atmospheric_lighting', True)
+            getattr(game_settings, 'atmospheric_lighting', False)
             and getattr(theme.active(), 'is_atmospheric', True)
         )
         if current_screen == "game" and atmo_active:
@@ -1714,7 +1714,8 @@ async def main():
             access_panel.draw(screen, prof, game_settings)
 
         display.set_shake(cam.offset())
-        display.present()
+        frame_mode = "felt" if current_screen == "game" else "menu"
+        display.present(frame_mode)
 
     pygame.quit()
     sys.exit()
@@ -1750,8 +1751,10 @@ def _finalize_game_stats(prof, gm, result, meta, game_start_time, toasts, partic
         return
     play_seconds = max(0.0, pygame.time.get_ticks() / 1000.0 - game_start_time)
     human = next((p for p in gm.players if p.is_human), None)
-    winner_idx = result.get("winner")
-    won = (human is not None and winner_idx == human.seat_index)
+    winner = result.get("winner")
+    winner_idx = winner.seat_index if winner is not None else None
+    won = (human is not None and winner_idx is not None
+           and winner_idx == human.seat_index)
     declared_won = bool(result.get("declarer_won")) and won
     declared_lost = bool(result.get("declarer_won") is False
                           and result.get("declarer_index") == (human.seat_index if human else -1))

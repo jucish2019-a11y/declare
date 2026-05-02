@@ -36,6 +36,28 @@ SEAT_POSITIONS_3 = {0: PLAYER_BOTTOM, 1: (672, 320), 2: (1888, 320)}
 SEAT_POSITIONS_4 = {0: PLAYER_BOTTOM, 1: PLAYER_LEFT, 2: PLAYER_TOP, 3: PLAYER_RIGHT}
 
 
+_FELT_WINDOW_CACHE = {'key': None, 'surface': None}
+
+
+def get_felt_texture(size):
+    """Return a window-sized surface filled with the theme's room-shadow color.
+
+    Used by the Display layer to fill letterbox bars during gameplay so the
+    bars read as the dim room around the felt oval rather than as a stretched
+    or distorted felt copy. Mirrors the base fill in `_build_felt_cache`
+    (which begins with `out.fill(felt_shadow)` before painting the oval)."""
+    th = theme_mod.active()
+    shadow_col = getattr(th, 'felt_shadow', th.felt_rim)
+    cache_key = (th.name, tuple(shadow_col), size)
+    if _FELT_WINDOW_CACHE['key'] == cache_key:
+        return _FELT_WINDOW_CACHE['surface']
+    out = pygame.Surface(size)
+    out.fill(shadow_col)
+    _FELT_WINDOW_CACHE['key'] = cache_key
+    _FELT_WINDOW_CACHE['surface'] = out
+    return out
+
+
 def _player_area_bounds(seat_index, num_players):
     if num_players == 2:
         return PLAYER_AREA_2.get(seat_index, PLAYER_AREA_2[0])
@@ -200,8 +222,12 @@ class Renderer:
     def _draw_table_felt(self):
         th = theme_mod.active()
         gs = self.game_settings
-        atmo = bool(getattr(gs, 'atmospheric_lighting', True)) if gs else True
-        cache_key = (th.name, atmo)
+        atmo = bool(getattr(gs, 'atmospheric_lighting', False)) if gs else False
+        # The felt color tuples are part of the cache key so that picking a new
+        # Table Felt in settings (which mutates the active theme's felt_*
+        # tuples but not its name) actually rebuilds the cached surface.
+        cache_key = (th.name, atmo, th.felt_deep, th.felt_mid,
+                     th.felt_rim, th.felt_shadow)
         if not hasattr(self, "_felt_cache") or self._felt_theme_key != cache_key:
             self._felt_cache = self._build_felt_cache()
             self._felt_theme_key = cache_key
@@ -251,7 +277,7 @@ class Renderer:
         #   - the active theme is non-atmospheric (e.g. Minimal), or
         #   - the player has turned off the atmospheric lighting setting.
         gs = self.game_settings
-        atmo_setting = bool(getattr(gs, 'atmospheric_lighting', True)) if gs else True
+        atmo_setting = bool(getattr(gs, 'atmospheric_lighting', False)) if gs else False
         theme_atmo = getattr(th, "is_atmospheric", True)
         if not getattr(th, "high_contrast", False) and atmo_setting and theme_atmo:
             lamp_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -1027,6 +1053,8 @@ class Renderer:
         return getattr(self, "_card_back_style", "classic")
 
     def set_back_style(self, style):
+        if getattr(self, "_card_back_style", None) == style:
+            return
         self._card_back_style = style
         card_render.invalidate_cache()
 

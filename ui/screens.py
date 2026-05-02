@@ -41,6 +41,7 @@ def _draw_screens_brass_ornament(surface, cx, cy, th):
 
 
 _MENU_BG_CACHE = {'surface': None, 'mtime': None}
+_MENU_BG_WINDOW_CACHE = {'key': None, 'surface': None}
 
 
 def _screen_background():
@@ -81,6 +82,51 @@ def _screen_background():
     out.blit(scaled, ((SCREEN_WIDTH - sw) // 2, (SCREEN_HEIGHT - sh) // 2))
     _MENU_BG_CACHE['surface'] = out
     _MENU_BG_CACHE['mtime'] = mtime
+    return out
+
+
+def get_menu_bg_texture(size):
+    """Return a window-sized cover-fit of the shared menu backdrop.
+
+    Used by the Display layer to fill letterbox bars on non-design-aspect
+    windows so menus, setup, peek, and game-over share a continuous
+    backdrop at any window size. Falls back to a cover-fit of the
+    procedural parlor backdrop when `assets/menu_bg.png` is missing."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, '..', 'assets', 'menu_bg.png')
+    path = os.path.normpath(path)
+    try:
+        mtime = os.path.getmtime(path) if os.path.exists(path) else None
+    except OSError:
+        mtime = None
+
+    if mtime is None:
+        import theme as theme_mod
+        th = theme_mod.active()
+        theme_key = (th.name,
+                     getattr(th, 'is_atmospheric', True),
+                     getattr(th, 'high_contrast', False))
+        cache_key = ('parlor', theme_key, size)
+    else:
+        cache_key = ('image', mtime, size)
+
+    if _MENU_BG_WINDOW_CACHE['key'] == cache_key:
+        return _MENU_BG_WINDOW_CACHE['surface']
+
+    if mtime is None:
+        import theme as theme_mod
+        base = parlor_backdrop(theme_mod.active())
+    else:
+        base = pygame.image.load(path).convert()
+    bw, bh = base.get_size()
+    scale = max(size[0] / bw, size[1] / bh)
+    sw = max(size[0], int(bw * scale))
+    sh = max(size[1], int(bh * scale))
+    scaled = pygame.transform.smoothscale(base, (sw, sh))
+    out = pygame.Surface(size)
+    out.blit(scaled, ((size[0] - sw) // 2, (size[1] - sh) // 2))
+    _MENU_BG_WINDOW_CACHE['key'] = cache_key
+    _MENU_BG_WINDOW_CACHE['surface'] = out
     return out
 
 
@@ -739,8 +785,8 @@ class SetupScreen:
         self.label_font = typo.body(int(UI_FONT_SIZE * scale))
         self.button_font = typo.body_bold(int(UI_FONT_SIZE * scale))
         self.input_font = typo.body(SMALL_FONT_SIZE + 2)
-        self.small_font = typo.body(13)
-        self.section_font = typo.header_bold(14)
+        self.small_font = typo.body(22)
+        self.section_font = typo.header_bold(24)
         self.num_players = num_players
         self.players_config = []
         import random as _r
@@ -803,11 +849,11 @@ class SetupScreen:
         # Section header: brass-edged pill instead of plain text.
         cy = 336
         _draw_brass_pill(
-            self.screen, SCREEN_WIDTH // 2, cy, 320, 36,
+            self.screen, SCREEN_WIDTH // 2, cy, 380, 46,
             "NUMBER OF PLAYERS", self.section_font, th,
             text_color=th.brass_300,
         )
-        cy += 56
+        cy += 60
 
         # Player-count buttons: brass-plate body with active-state pulsing
         # inner glow so the choice reads at a glance.
@@ -898,7 +944,7 @@ class SetupScreen:
         self.screen.blit(initial, initial.get_rect(center=(avatar_x, avatar_y)))
 
         seat_label = self.small_font.render(f"SEAT {i + 1}", True, th.brass_300)
-        self.screen.blit(seat_label, (x + 125, y + 26))
+        self.screen.blit(seat_label, (x + 125, y + 18))
 
         name_x = x + 125
         name_y = y + 51
@@ -981,7 +1027,7 @@ class SetupScreen:
             diff_y = y + h // 2 - 26
             self._diff_rects[i] = {}
             label = self.small_font.render("DIFFICULTY", True, th.brass_300)
-            self.screen.blit(label, (diff_x, diff_y - 29))
+            self.screen.blit(label, (diff_x, diff_y - 34))
             for j, diff in enumerate(["easy", "medium", "hard"]):
                 bw_btn = min(134, max(96, (w - diff_x - x - 32) // 3 - 6))
                 bh_btn = 51

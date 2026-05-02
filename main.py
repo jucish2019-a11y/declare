@@ -542,7 +542,7 @@ async def main():
             if current_screen == "game" and game_manager is not None:
                 if (theme.active().particles_enabled
                         and theme.active().motion_scale > 0.1
-                        and getattr(game_settings, 'atmospheric_lighting', True)
+                        and getattr(game_settings, 'atmospheric_lighting', False)
                         and getattr(theme.active(), 'is_atmospheric', True)):
                     particles.ambient_parlor_motes(
                         SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
@@ -1688,7 +1688,7 @@ async def main():
         # display preference AND the active theme's `is_atmospheric` flag.
         # Minimal theme reports is_atmospheric=False so it stays flat.
         atmo_active = (
-            getattr(game_settings, 'atmospheric_lighting', True)
+            getattr(game_settings, 'atmospheric_lighting', False)
             and getattr(theme.active(), 'is_atmospheric', True)
         )
         if current_screen == "game" and atmo_active:

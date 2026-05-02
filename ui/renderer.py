@@ -177,8 +177,12 @@ class Renderer:
     def _draw_table_felt(self):
         th = theme_mod.active()
         gs = self.game_settings
-        atmo = bool(getattr(gs, 'atmospheric_lighting', True)) if gs else True
-        cache_key = (th.name, atmo)
+        atmo = bool(getattr(gs, 'atmospheric_lighting', False)) if gs else False
+        # The felt color tuples are part of the cache key so that picking a new
+        # Table Felt in settings (which mutates the active theme's felt_*
+        # tuples but not its name) actually rebuilds the cached surface.
+        cache_key = (th.name, atmo, th.felt_deep, th.felt_mid,
+                     th.felt_rim, th.felt_shadow)
         if not hasattr(self, "_felt_cache") or self._felt_theme_key != cache_key:
             self._felt_cache = self._build_felt_cache()
             self._felt_theme_key = cache_key
@@ -228,7 +232,7 @@ class Renderer:
         #   - the active theme is non-atmospheric (e.g. Minimal), or
         #   - the player has turned off the atmospheric lighting setting.
         gs = self.game_settings
-        atmo_setting = bool(getattr(gs, 'atmospheric_lighting', True)) if gs else True
+        atmo_setting = bool(getattr(gs, 'atmospheric_lighting', False)) if gs else False
         theme_atmo = getattr(th, "is_atmospheric", True)
         if not getattr(th, "high_contrast", False) and atmo_setting and theme_atmo:
             lamp_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)

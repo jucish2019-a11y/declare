@@ -105,7 +105,7 @@ class SettingsBag:
     text_scale: float = 1.0
     motion_scale: float = 1.0
     particles_enabled: bool = True
-    atmospheric_lighting: bool = True
+    atmospheric_lighting: bool = False
     music_volume: float = 0.5
     sfx_volume: float = 0.7
     voice_volume: float = 0.6
@@ -206,7 +206,7 @@ def _from_dict(data: dict) -> Profile:
         text_scale=settings_data.get("text_scale", 1.0),
         motion_scale=settings_data.get("motion_scale", 1.0),
         particles_enabled=settings_data.get("particles_enabled", True),
-        atmospheric_lighting=settings_data.get("atmospheric_lighting", True),
+        atmospheric_lighting=settings_data.get("atmospheric_lighting", False),
         music_volume=settings_data.get("music_volume", 0.5),
         sfx_volume=settings_data.get("sfx_volume", 0.7),
         voice_volume=settings_data.get("voice_volume", 0.6),

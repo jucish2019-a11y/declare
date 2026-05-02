@@ -604,27 +604,42 @@ class MenuScreen:
         # read as resting on a surface, not floating.
         if (getattr(th, 'is_atmospheric', True)
                 and not getattr(th, 'high_contrast', False)):
-            fan_glow = pygame.Surface((900, 280), pygame.SRCALPHA)
-            for i in range(18, 0, -1):
-                t = i / 18
-                a = int(28 * (1 - t) ** 1.4)
-                if a <= 0:
-                    continue
-                ew = int(900 * t)
-                eh = int(280 * t)
-                pygame.draw.ellipse(
-                    fan_glow, (*th.brass_500, a),
-                    pygame.Rect((900 - ew) // 2, (280 - eh) // 2, ew, eh),
-                )
-            self.screen.blit(fan_glow,
+            if not hasattr(self, '_fan_glow_cache'):
+                self._fan_glow_cache = {}
+            glow_key = th.name
+            if glow_key not in self._fan_glow_cache:
+                fan_glow = pygame.Surface((900, 280), pygame.SRCALPHA)
+                for i in range(10, 0, -1):
+                    t = i / 10
+                    a = int(28 * (1 - t) ** 1.4)
+                    if a <= 0:
+                        continue
+                    ew = int(900 * t)
+                    eh = int(280 * t)
+                    pygame.draw.ellipse(
+                        fan_glow, (*th.brass_500, a),
+                        pygame.Rect((900 - ew) // 2, (280 - eh) // 2, ew, eh),
+                    )
+                self._fan_glow_cache[glow_key] = fan_glow
+            self.screen.blit(self._fan_glow_cache[glow_key],
                              (SCREEN_WIDTH // 2 - 450, 720 - 140))
 
+        # Cache rotated card images to avoid per-frame rotate transforms.
+        if not hasattr(self, '_fan_rot_cache'):
+            self._fan_rot_cache = {}
         for dx, cy_f, angle in self._compute_card_fan(self._t):
             cx = SCREEN_WIDTH // 2 + int(dx)
             cy = int(cy_f)
             if abs(angle) > 0.05:
-                scaled = pygame.transform.rotate(base, angle)
-                shadow = pygame.transform.rotate(shadow_src, angle)
+                # Round angle to nearest 0.5 degree for cache hits.
+                angle_key = round(angle * 2) / 2
+                cache_key = (angle_key, base)
+                if cache_key not in self._fan_rot_cache:
+                    self._fan_rot_cache[cache_key] = (
+                        pygame.transform.rotate(base, angle_key),
+                        pygame.transform.rotate(shadow_src, angle_key),
+                    )
+                scaled, shadow = self._fan_rot_cache[cache_key]
             else:
                 scaled = base
                 shadow = shadow_src

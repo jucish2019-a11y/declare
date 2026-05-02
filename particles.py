@@ -96,17 +96,16 @@ class ParticleSystem:
             pygame.draw.line(screen, color, (sx - size, sy), (sx + size, sy), 1)
             pygame.draw.line(screen, color, (sx, sy - size), (sx, sy + size), 1)
         elif p.kind == "mote":
-            # Soft parlor dust mote: low-alpha core + softer outer halo for the
-            # lamp-light catching effect. Doesn't shrink with age — fades via alpha.
+            # Soft parlor dust mote: low-alpha core + softer outer halo.
             base_a = max(0, alpha // 4)
             if base_a <= 0:
                 return
-            sz = max(1, int(p.size * 2 + 2))
-            mote = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
-            pygame.draw.circle(mote, (*p.color, base_a), (sz, sz), sz)
-            pygame.draw.circle(mote, (*p.color, min(255, base_a * 3)),
-                               (sz, sz), max(1, int(p.size)))
-            screen.blit(mote, (int(p.x - sz), int(p.y - sz)))
+            sz = max(1, int(p.size))
+            outer = int(p.size * 2 + 2)
+            # Direct draws instead of per-particle Surface allocation.
+            pygame.draw.circle(screen, (*p.color, base_a), (int(p.x), int(p.y)), outer)
+            pygame.draw.circle(screen, (*p.color, min(255, base_a * 3)),
+                               (int(p.x), int(p.y)), sz)
         else:
             size = max(1, int(p.size * (1.0 - 0.7 * p.t)))
             pygame.draw.circle(screen, color, (int(p.x), int(p.y)), size)

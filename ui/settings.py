@@ -103,6 +103,21 @@ class SettingsMenu:
         self._tab_rects = {}
         self._done_rect = None
         self._profile_ref = None
+        # Surface cache for expensive gradients. Invalidated on theme change.
+        self._surface_cache = {}
+        self._cache_theme_name = None
+
+    def _ensure_cache(self):
+        th_name = theme_mod.active().name
+        if self._cache_theme_name != th_name:
+            self._surface_cache.clear()
+            self._cache_theme_name = th_name
+
+    def _cached(self, key, builder):
+        self._ensure_cache()
+        if key not in self._surface_cache:
+            self._surface_cache[key] = builder()
+        return self._surface_cache[key]
 
     def attach_profile(self, prof):
         """Settings menu can persist its own changes when a profile is bound."""
@@ -290,16 +305,21 @@ class SettingsMenu:
                          border_radius=14)
         self.screen.blit(shadow, (self.PANEL_X - 8, self.PANEL_Y + 4))
 
-        panel = pygame.Surface((self.PANEL_W, self.PANEL_H), pygame.SRCALPHA)
-        for i in range(self.PANEL_H):
-            t = i / max(1, self.PANEL_H - 1)
-            r = int(th.felt_rim[0] + (th.felt_mid[0] - th.felt_rim[0]) * t * 0.55)
-            g = int(th.felt_rim[1] + (th.felt_mid[1] - th.felt_rim[1]) * t * 0.55)
-            b = int(th.felt_rim[2] + (th.felt_mid[2] - th.felt_rim[2]) * t * 0.55)
-            pygame.draw.line(panel, (r, g, b, 245), (0, i), (self.PANEL_W, i))
-        mask = pygame.Surface((self.PANEL_W, self.PANEL_H), pygame.SRCALPHA)
-        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=14)
-        panel.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        def _build_panel():
+            surf = pygame.Surface((self.PANEL_W, self.PANEL_H), pygame.SRCALPHA)
+            for i in range(self.PANEL_H):
+                t = i / max(1, self.PANEL_H - 1)
+                r = int(th.felt_rim[0] + (th.felt_mid[0] - th.felt_rim[0]) * t * 0.55)
+                g = int(th.felt_rim[1] + (th.felt_mid[1] - th.felt_rim[1]) * t * 0.55)
+                b = int(th.felt_rim[2] + (th.felt_mid[2] - th.felt_rim[2]) * t * 0.55)
+                pygame.draw.line(surf, (r, g, b, 245), (0, i), (self.PANEL_W, i))
+            mask = pygame.Surface((self.PANEL_W, self.PANEL_H), pygame.SRCALPHA)
+            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=14)
+            surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            return surf
+
+        panel_key = ("settings_panel", self.PANEL_W, self.PANEL_H)
+        panel = self._cached(panel_key, _build_panel)
         self.screen.blit(panel, panel_rect.topleft)
 
         pygame.draw.rect(self.screen, th.brass_300, panel_rect, 2, border_radius=14)
@@ -354,16 +374,22 @@ class SettingsMenu:
         hov = self._done_rect.collidepoint(mouse_pos)
         done_top = th.brass_300 if hov else th.brass_500
         done_bot = th.brass_500 if hov else th.brass_700
-        plate = pygame.Surface((bw, bh), pygame.SRCALPHA)
-        for j in range(bh):
-            t = j / max(1, bh - 1)
-            rr = int(done_top[0] + (done_bot[0] - done_top[0]) * t)
-            gg = int(done_top[1] + (done_bot[1] - done_top[1]) * t)
-            bb = int(done_top[2] + (done_bot[2] - done_top[2]) * t)
-            pygame.draw.line(plate, (rr, gg, bb, 255), (0, j), (bw, j))
-        m = pygame.Surface((bw, bh), pygame.SRCALPHA)
-        pygame.draw.rect(m, (255, 255, 255, 255), m.get_rect(), border_radius=10)
-        plate.blit(m, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+
+        def _build_done(w, h, top, bot):
+            surf = pygame.Surface((w, h), pygame.SRCALPHA)
+            for j in range(h):
+                t = j / max(1, h - 1)
+                rr = int(top[0] + (bot[0] - top[0]) * t)
+                gg = int(top[1] + (bot[1] - top[1]) * t)
+                bb = int(top[2] + (bot[2] - top[2]) * t)
+                pygame.draw.line(surf, (rr, gg, bb, 255), (0, j), (w, j))
+            m = pygame.Surface((w, h), pygame.SRCALPHA)
+            pygame.draw.rect(m, (255, 255, 255, 255), m.get_rect(), border_radius=10)
+            surf.blit(m, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            return surf
+
+        done_key = ("done_btn", bw, bh, hov)
+        plate = self._cached(done_key, lambda: _build_done(bw, bh, done_top, done_bot))
         self.screen.blit(plate, self._done_rect.topleft)
         pygame.draw.rect(self.screen, th.brass_900, self._done_rect, 2,
                          border_radius=10)
@@ -389,7 +415,20 @@ class SettingsMenu:
             active = (key == self.tab)
             hover = r.collidepoint(mouse_pos)
 
-            plate = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
+            def _build_tab(w, h, tc, bc):
+                surf = pygame.Surface((w, h), pygame.SRCALPHA)
+                for j in range(h):
+                    t = j / max(1, h - 1)
+                    rr = int(tc[0] + (bc[0] - tc[0]) * t)
+                    gg = int(tc[1] + (bc[1] - tc[1]) * t)
+                    bb = int(tc[2] + (bc[2] - tc[2]) * t)
+                    pygame.draw.line(surf, (rr, gg, bb, 255), (0, j), (w, j))
+                mask = pygame.Surface((w, h), pygame.SRCALPHA)
+                pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(),
+                                 border_radius=8)
+                surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+                return surf
+
             if active:
                 top_col = th.brass_300
                 bot_col = th.brass_500
@@ -402,16 +441,9 @@ class SettingsMenu:
                 top_col = (44, 40, 28)
                 bot_col = (28, 26, 18)
                 text_color = th.text_dim
-            for j in range(r.height):
-                t = j / max(1, r.height - 1)
-                rr = int(top_col[0] + (bot_col[0] - top_col[0]) * t)
-                gg = int(top_col[1] + (bot_col[1] - top_col[1]) * t)
-                bb = int(top_col[2] + (bot_col[2] - top_col[2]) * t)
-                pygame.draw.line(plate, (rr, gg, bb, 255), (0, j), (r.width, j))
-            mask = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
-            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(),
-                             border_radius=8)
-            plate.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+
+            tab_key = ("settings_tab", r.width, r.height, active, hover)
+            plate = self._cached(tab_key, lambda: _build_tab(r.width, r.height, top_col, bot_col))
             self.screen.blit(plate, r.topleft)
 
             border = th.brass_300 if active else th.brass_700
@@ -459,16 +491,21 @@ class SettingsMenu:
                 bot_col = (32, 30, 22)
                 txt_color = th.text_white
                 border = th.brass_700
-            plate = pygame.Surface((bw, bh), pygame.SRCALPHA)
-            for j in range(bh):
-                t = j / max(1, bh - 1)
-                rr = int(top_col[0] + (bot_col[0] - top_col[0]) * t)
-                gg = int(top_col[1] + (bot_col[1] - top_col[1]) * t)
-                bb = int(top_col[2] + (bot_col[2] - top_col[2]) * t)
-                pygame.draw.line(plate, (rr, gg, bb, 255), (0, j), (bw, j))
-            m = pygame.Surface((bw, bh), pygame.SRCALPHA)
-            pygame.draw.rect(m, (255, 255, 255, 255), m.get_rect(), border_radius=6)
-            plate.blit(m, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            def _build_pill(w, h, tc, bc):
+                surf = pygame.Surface((w, h), pygame.SRCALPHA)
+                for j in range(h):
+                    t = j / max(1, h - 1)
+                    rr = int(tc[0] + (bc[0] - tc[0]) * t)
+                    gg = int(tc[1] + (bc[1] - tc[1]) * t)
+                    bb = int(tc[2] + (bc[2] - tc[2]) * t)
+                    pygame.draw.line(surf, (rr, gg, bb, 255), (0, j), (w, j))
+                m = pygame.Surface((w, h), pygame.SRCALPHA)
+                pygame.draw.rect(m, (255, 255, 255, 255), m.get_rect(), border_radius=6)
+                surf.blit(m, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+                return surf
+
+            pill_key = ("settings_pill", bw, bh, active)
+            plate = self._cached(pill_key, lambda: _build_pill(bw, bh, top_col, bot_col))
             self.screen.blit(plate, r.topleft)
             pygame.draw.rect(self.screen, border, r, 1, border_radius=6)
             if active:

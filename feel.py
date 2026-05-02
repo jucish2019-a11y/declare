@@ -128,7 +128,7 @@ class Vignette:
         surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         cx, cy = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
         max_d = math.hypot(cx, cy)
-        steps = 30
+        steps = 16
         tr, tg, tb = self.tint
         for i in range(steps):
             t = i / (steps - 1)
@@ -187,8 +187,8 @@ class LampGlow:
         col = theme.active().lamp_glow
         radius = 360
         glow = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-        for i in range(20, 0, -1):
-            tt = i / 20
+        for i in range(10, 0, -1):
+            tt = i / 10
             r = int(radius * tt)
             a = int(28 * intensity * (1.0 - tt) ** 1.4)
             if a <= 0:

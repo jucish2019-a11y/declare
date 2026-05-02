@@ -107,6 +107,23 @@ class Renderer:
         self.dragging_card = None
         self.drag_pos = None
         self.game_settings = None
+        # Surface cache for expensive procedural gradients. Invalidated on theme change.
+        self._surface_cache = {}
+        self._cache_theme_name = None
+
+    def _ensure_cache(self):
+        """Invalidate surface cache when theme changes."""
+        th_name = theme_mod.active().name
+        if self._cache_theme_name != th_name:
+            self._surface_cache.clear()
+            self._cache_theme_name = th_name
+
+    def _cached(self, key, builder):
+        """Return a cached surface, building it if necessary."""
+        self._ensure_cache()
+        if key not in self._surface_cache:
+            self._surface_cache[key] = builder()
+        return self._surface_cache[key]
 
     def draw(self, game_manager, mouse_pos=(0, 0), action_buttons=None,
              cancel_button=None, status_message="", awaiting_target=None):
@@ -144,16 +161,22 @@ class Renderer:
     def _draw_action_bar_container(self):
         th = theme_mod.active()
         container_rect = pygame.Rect(0, ACTION_BAR_Y - 8, SCREEN_WIDTH, ACTION_BAR_H + 16)
-        container_surf = pygame.Surface((container_rect.width, container_rect.height), pygame.SRCALPHA)
-        for i in range(container_rect.height):
-            t = i / max(1, container_rect.height - 1)
-            r = int(th.brass_900[0] * (0.40 + 0.30 * t))
-            g = int(th.brass_900[1] * (0.40 + 0.30 * t))
-            b = int(th.brass_900[2] * (0.40 + 0.30 * t))
-            pygame.draw.line(container_surf, (r, g, b, 240), (0, i), (container_rect.width, i))
-        mask = pygame.Surface(container_surf.get_size(), pygame.SRCALPHA)
-        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=10)
-        container_surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+
+        def _build_container():
+            surf = pygame.Surface((container_rect.width, container_rect.height), pygame.SRCALPHA)
+            h = container_rect.height
+            for i in range(h):
+                t = i / max(1, h - 1)
+                r = int(th.brass_900[0] * (0.40 + 0.30 * t))
+                g = int(th.brass_900[1] * (0.40 + 0.30 * t))
+                b = int(th.brass_900[2] * (0.40 + 0.30 * t))
+                pygame.draw.line(surf, (r, g, b, 240), (0, i), (container_rect.width, i))
+            mask = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=10)
+            surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            return surf
+
+        container_surf = self._cached("action_bar_container", _build_container)
         self.screen.blit(container_surf, container_rect.topleft)
 
         # Top edge: thicker brass highlight band so the action rail visually
@@ -202,7 +225,7 @@ class Renderer:
         # We draw progressively smaller filled ellipses from edge color to center color,
         # which avoids the BLEND_MAX trick (which couldn't truly darken the rim).
         felt_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        steps = 48
+        steps = 24
         for layer in range(steps, 0, -1):
             t = layer / steps  # 1.0 → ~0
             # Ease-out so the bright center occupies more area than a linear ramp.
@@ -233,7 +256,7 @@ class Renderer:
         if not getattr(th, "high_contrast", False) and atmo_setting and theme_atmo:
             lamp_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
             pool_radius = int(rx * 0.62)
-            pool_steps = 56
+            pool_steps = 20
             for i in range(pool_steps, 0, -1):
                 t = i / pool_steps  # 1.0 outer → ~0 inner
                 # Quadratic falloff so the pool has a soft edge but a hot core.
@@ -325,19 +348,24 @@ class Renderer:
         th = theme_mod.active()
         pool_w = 820
         pool_h = 260
-        pool = pygame.Surface((pool_w, pool_h), pygame.SRCALPHA)
-        layers = 18
-        for i in range(layers, 0, -1):
-            t = i / layers
-            a = int(26 * (1 - t) ** 1.4)
-            if a <= 0:
-                continue
-            ew = int(pool_w * t)
-            eh = int(pool_h * t)
-            pygame.draw.ellipse(
-                pool, (*th.lamp_glow, a),
-                pygame.Rect((pool_w - ew) // 2, (pool_h - eh) // 2, ew, eh),
-            )
+
+        def _build_hand_pool():
+            pool = pygame.Surface((pool_w, pool_h), pygame.SRCALPHA)
+            layers = 10
+            for i in range(layers, 0, -1):
+                t = i / layers
+                a = int(26 * (1 - t) ** 1.4)
+                if a <= 0:
+                    continue
+                ew = int(pool_w * t)
+                eh = int(pool_h * t)
+                pygame.draw.ellipse(
+                    pool, (*th.lamp_glow, a),
+                    pygame.Rect((pool_w - ew) // 2, (pool_h - eh) // 2, ew, eh),
+                )
+            return pool
+
+        pool = self._cached("hand_pool", _build_hand_pool)
         self.screen.blit(pool, (cx - pool_w // 2, cy - pool_h // 2))
 
     def _draw_center_stack_groundplate(self):
@@ -351,21 +379,24 @@ class Renderer:
         center_y = DECK_CENTER[1] + 8
         ellipse_w = 880
         ellipse_h = 280
-        plate = pygame.Surface((ellipse_w, ellipse_h), pygame.SRCALPHA)
-        # Paint progressively smaller ellipses with rising alpha so the falloff
-        # is soft at the edges.
-        layers = 24
-        for i in range(layers, 0, -1):
-            t = i / layers
-            a = int(38 * (1 - t) ** 1.4)
-            if a <= 0:
-                continue
-            ew = int(ellipse_w * t)
-            eh = int(ellipse_h * t)
-            pygame.draw.ellipse(
-                plate, (*th.brass_500, a),
-                pygame.Rect((ellipse_w - ew) // 2, (ellipse_h - eh) // 2, ew, eh),
-            )
+
+        def _build_groundplate():
+            plate = pygame.Surface((ellipse_w, ellipse_h), pygame.SRCALPHA)
+            layers = 12
+            for i in range(layers, 0, -1):
+                t = i / layers
+                a = int(38 * (1 - t) ** 1.4)
+                if a <= 0:
+                    continue
+                ew = int(ellipse_w * t)
+                eh = int(ellipse_h * t)
+                pygame.draw.ellipse(
+                    plate, (*th.brass_500, a),
+                    pygame.Rect((ellipse_w - ew) // 2, (ellipse_h - eh) // 2, ew, eh),
+                )
+            return plate
+
+        plate = self._cached("center_stack_groundplate", _build_groundplate)
         self.screen.blit(plate, (center_x - ellipse_w // 2, center_y - ellipse_h // 2))
 
     def _draw_pile_halo(self, game_manager):
@@ -389,17 +420,26 @@ class Renderer:
         base_alpha = int(50 + 60 * t)
         halo_w = CARD_WIDTH + 48
         halo_h = CARD_HEIGHT + 48
-        halo = pygame.Surface((halo_w, halo_h), pygame.SRCALPHA)
-        for i in range(20, 0, -2):
-            a = int(base_alpha * (i / 20) ** 1.6)
-            if a <= 0:
-                continue
-            inset = 24 - i
-            pygame.draw.rect(
-                halo, (*th.brass_300, a),
-                pygame.Rect(inset, inset, halo_w - inset * 2, halo_h - inset * 2),
-                1, border_radius=CORNER_RADIUS + 4,
-            )
+
+        def _build_halo_base():
+            surf = pygame.Surface((halo_w, halo_h), pygame.SRCALPHA)
+            for i in range(12, 0, -1):
+                a = int(255 * (i / 12) ** 1.6)
+                if a <= 0:
+                    continue
+                inset = 24 - int(i * 2)
+                if inset < 0:
+                    inset = 0
+                pygame.draw.rect(
+                    surf, (*th.brass_300, a),
+                    pygame.Rect(inset, inset, halo_w - inset * 2, halo_h - inset * 2),
+                    1, border_radius=CORNER_RADIUS + 4,
+                )
+            return surf
+
+        halo_key = ("pile_halo", halo_w, halo_h)
+        halo = self._cached(halo_key, _build_halo_base)
+        halo.set_alpha(int(base_alpha * 255 / 110))  # scale to pulse alpha
         self.screen.blit(halo, (cx - halo_w // 2, cy - halo_h // 2))
 
     def _draw_stack_label(self, cx, cy, label, value):
@@ -416,17 +456,22 @@ class Renderer:
         pill_y = cy - pill_h // 2
 
         # Body: brass_900 → brass_700 vertical gradient, semi-translucent.
-        pill = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
-        for i in range(pill_h):
-            t = i / max(1, pill_h - 1)
-            r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * t)
-            g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * t)
-            b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * t)
-            pygame.draw.line(pill, (r, g, b, 220), (0, i), (pill_w, i))
-        mask = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
-        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(),
-                         border_radius=pill_h // 2)
-        pill.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        def _build_pill(pw, ph):
+            pill = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            for i in range(ph):
+                t = i / max(1, ph - 1)
+                r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * t)
+                g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * t)
+                b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * t)
+                pygame.draw.line(pill, (r, g, b, 220), (0, i), (pw, i))
+            mask = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(),
+                             border_radius=ph // 2)
+            pill.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            return pill
+
+        pill_key = ("stack_label_pill", pill_w, pill_h)
+        pill = self._cached(pill_key, lambda: _build_pill(pill_w, pill_h))
         self.screen.blit(pill, (pill_x, pill_y))
 
         # Top highlight + outline.
@@ -528,17 +573,22 @@ class Renderer:
         # Mid brass band (2px in).
         pygame.draw.circle(self.screen, th.brass_500, (cx, cy), radius - 3)
         # Inner radial fill: brass_900 → brass_700 from center out.
-        for i in range(radius - 5, 0, -1):
-            t = 1 - (i / max(1, radius - 5))
-            r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * t)
-            g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * t)
-            b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * t)
-            pygame.draw.circle(self.screen, (r, g, b), (cx, cy), i)
-        # Inner highlight (top-left).
-        hl = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
-        pygame.draw.circle(hl, (*th.brass_300, 60),
-                           (radius - 5, radius - 5), max(2, radius // 3))
-        self.screen.blit(hl, (cx - radius, cy - radius))
+        def _build_medallion_fill(d, rad):
+            surf = pygame.Surface((d, d), pygame.SRCALPHA)
+            for i in range(rad - 5, 0, -1):
+                t = 1 - (i / max(1, rad - 5))
+                r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * t)
+                g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * t)
+                b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * t)
+                pygame.draw.circle(surf, (r, g, b), (rad, rad), i)
+            # Inner highlight (top-left).
+            pygame.draw.circle(surf, (*th.brass_300, 60),
+                               (rad - 5, rad - 5), max(2, rad // 3))
+            return surf
+
+        fill_key = ("state_medallion_fill", diameter)
+        fill_surf = self._cached(fill_key, lambda: _build_medallion_fill(diameter, radius))
+        self.screen.blit(fill_surf, (cx - radius, cy - radius))
 
         # Center glyph — first letter of the state in Cinzel.
         glyph_letter = state_label.split(" ")[0][:1].upper() if state_label else "?"
@@ -609,18 +659,21 @@ class Renderer:
             self.screen.blit(ring, (plate_x - ring_pad, plate_y - ring_pad))
 
         # Plate body — brass_900→brass_700 vertical gradient, 8px corners.
-        plate = pygame.Surface((plate_w, plate_h), pygame.SRCALPHA)
-        for i in range(plate_h):
-            t = i / max(1, plate_h - 1)
-            # Top is darker, bottom slightly lighter — like an inset metal panel.
-            r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * t)
-            g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * t)
-            b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * t)
-            pygame.draw.line(plate, (r, g, b, 240), (0, i), (plate_w, i))
-        # Round corners via mask.
-        mask = pygame.Surface((plate_w, plate_h), pygame.SRCALPHA)
-        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=8)
-        plate.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        def _build_nameplate_plate(pw, ph):
+            plate = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            for i in range(ph):
+                t = i / max(1, ph - 1)
+                r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * t)
+                g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * t)
+                b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * t)
+                pygame.draw.line(plate, (r, g, b, 240), (0, i), (pw, i))
+            mask = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=8)
+            plate.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            return plate
+
+        plate_key = ("nameplate_plate", plate_w, plate_h)
+        plate = self._cached(plate_key, lambda: _build_nameplate_plate(plate_w, plate_h))
         self.screen.blit(plate, (plate_x, plate_y))
 
         # Top highlight + outline.
@@ -689,13 +742,18 @@ class Renderer:
     def _draw_status_bar(self, game_manager):
         th = theme_mod.active()
         bar_rect = pygame.Rect(0, 0, SCREEN_WIDTH, STATUS_BAR_H)
-        plate = pygame.Surface((SCREEN_WIDTH, STATUS_BAR_H))
-        for i in range(STATUS_BAR_H):
-            t = i / max(1, STATUS_BAR_H - 1)
-            r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * (1 - abs(t - 0.5) * 2))
-            g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * (1 - abs(t - 0.5) * 2))
-            b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * (1 - abs(t - 0.5) * 2))
-            pygame.draw.line(plate, (r, g, b), (0, i), (SCREEN_WIDTH, i))
+
+        def _build_status_bar():
+            plate = pygame.Surface((SCREEN_WIDTH, STATUS_BAR_H))
+            for i in range(STATUS_BAR_H):
+                t = i / max(1, STATUS_BAR_H - 1)
+                r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * (1 - abs(t - 0.5) * 2))
+                g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * (1 - abs(t - 0.5) * 2))
+                b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * (1 - abs(t - 0.5) * 2))
+                pygame.draw.line(plate, (r, g, b), (0, i), (SCREEN_WIDTH, i))
+            return plate
+
+        plate = self._cached("status_bar", _build_status_bar)
         self.screen.blit(plate, (0, 0))
 
         pygame.draw.line(self.screen, th.brass_300, (0, 0), (SCREEN_WIDTH, 0), 1)
@@ -908,21 +966,26 @@ class Renderer:
         # corner of the card back, sells "lit by overhead lamp." Subtle.
         th = theme_mod.active()
         if not getattr(th, "high_contrast", False):
-            spec = pygame.Surface((CARD_WIDTH, CARD_HEIGHT), pygame.SRCALPHA)
-            for i in range(20, 0, -1):
-                a = int(i * 2.2)
-                if a <= 0:
-                    continue
-                pygame.draw.circle(
-                    spec, (*th.lamp_glow, a),
-                    (int(CARD_WIDTH * 0.28), int(CARD_HEIGHT * 0.18)),
-                    int(CARD_WIDTH * 0.28 * (i / 20)),
-                )
-            # Mask to card rounded shape so the gleam doesn't bleed past edges.
-            shape = pygame.Surface((CARD_WIDTH, CARD_HEIGHT), pygame.SRCALPHA)
-            pygame.draw.rect(shape, (255, 255, 255, 255), shape.get_rect(),
-                             border_radius=CORNER_RADIUS)
-            spec.blit(shape, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            def _build_card_highlight():
+                spec = pygame.Surface((CARD_WIDTH, CARD_HEIGHT), pygame.SRCALPHA)
+                for i in range(8, 0, -1):
+                    a = int(i * 5.5)
+                    if a <= 0:
+                        continue
+                    pygame.draw.circle(
+                        spec, (*th.lamp_glow, a),
+                        (int(CARD_WIDTH * 0.28), int(CARD_HEIGHT * 0.18)),
+                        int(CARD_WIDTH * 0.28 * (i / 8)),
+                    )
+                # Mask to card rounded shape so the gleam doesn't bleed past edges.
+                shape = pygame.Surface((CARD_WIDTH, CARD_HEIGHT), pygame.SRCALPHA)
+                pygame.draw.rect(shape, (255, 255, 255, 255), shape.get_rect(),
+                                 border_radius=CORNER_RADIUS)
+                spec.blit(shape, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+                return spec
+
+            highlight_key = ("card_back_highlight", CARD_WIDTH, CARD_HEIGHT)
+            spec = self._cached(highlight_key, _build_card_highlight)
             self.screen.blit(spec, (x, y + lift_y))
 
         if hovered:
@@ -1349,16 +1412,21 @@ class Renderer:
 
         # Outer brass panel — slightly more opaque than before so the felt
         # doesn't bleed through and wash out the ledger paper inside.
-        panel_surf = pygame.Surface((LOG_PANEL_W, LOG_PANEL_H), pygame.SRCALPHA)
-        for i in range(LOG_PANEL_H):
-            t = i / max(1, LOG_PANEL_H - 1)
-            r = int(th.brass_900[0] * (0.40 + 0.22 * (1 - t)))
-            g = int(th.brass_900[1] * (0.40 + 0.22 * (1 - t)))
-            b = int(th.brass_900[2] * (0.40 + 0.22 * (1 - t)))
-            pygame.draw.line(panel_surf, (r, g, b, 245), (0, i), (LOG_PANEL_W, i))
-        mask = pygame.Surface(panel_surf.get_size(), pygame.SRCALPHA)
-        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=10)
-        panel_surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        def _build_log_panel():
+            surf = pygame.Surface((LOG_PANEL_W, LOG_PANEL_H), pygame.SRCALPHA)
+            for i in range(LOG_PANEL_H):
+                t = i / max(1, LOG_PANEL_H - 1)
+                r = int(th.brass_900[0] * (0.40 + 0.22 * (1 - t)))
+                g = int(th.brass_900[1] * (0.40 + 0.22 * (1 - t)))
+                b = int(th.brass_900[2] * (0.40 + 0.22 * (1 - t)))
+                pygame.draw.line(surf, (r, g, b, 245), (0, i), (LOG_PANEL_W, i))
+            mask = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=10)
+            surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            return surf
+
+        panel_key = ("log_panel", LOG_PANEL_W, LOG_PANEL_H)
+        panel_surf = self._cached(panel_key, _build_log_panel)
         self.screen.blit(panel_surf, (LOG_PANEL_X, LOG_PANEL_Y))
 
         # Aged-paper inner panel — a warm dark tone behind the entries so log
@@ -1373,18 +1441,22 @@ class Renderer:
             LOG_PANEL_X + paper_inset, paper_top,
             LOG_PANEL_W - paper_inset * 2, LOG_PANEL_Y + LOG_PANEL_H - paper_top - paper_inset,
         )
-        paper = pygame.Surface(paper_rect.size, pygame.SRCALPHA)
-        # Paper tone: warm dark with a faint vertical gradient so it reads
-        # like aged ledger leaf — slightly lighter at the top, deeper at bottom.
-        for i in range(paper_rect.height):
-            t = i / max(1, paper_rect.height - 1)
-            r = int(40 + (52 - 40) * (1 - t))
-            g = int(32 + (42 - 32) * (1 - t))
-            b = int(18 + (26 - 18) * (1 - t))
-            pygame.draw.line(paper, (r, g, b, 230), (0, i), (paper_rect.width, i))
-        paper_mask = pygame.Surface(paper_rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(paper_mask, (255, 255, 255, 255), paper_mask.get_rect(), border_radius=6)
-        paper.blit(paper_mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+
+        def _build_paper(pw, ph):
+            surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            for i in range(ph):
+                t = i / max(1, ph - 1)
+                r = int(40 + (52 - 40) * (1 - t))
+                g = int(32 + (42 - 32) * (1 - t))
+                b = int(18 + (26 - 18) * (1 - t))
+                pygame.draw.line(surf, (r, g, b, 230), (0, i), (pw, i))
+            paper_mask = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            pygame.draw.rect(paper_mask, (255, 255, 255, 255), paper_mask.get_rect(), border_radius=6)
+            surf.blit(paper_mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            return surf
+
+        paper_key = ("log_paper", paper_rect.width, paper_rect.height)
+        paper = self._cached(paper_key, lambda: _build_paper(paper_rect.width, paper_rect.height))
         self.screen.blit(paper, paper_rect.topleft)
         pygame.draw.rect(self.screen, th.brass_900, paper_rect, 1, border_radius=6)
 

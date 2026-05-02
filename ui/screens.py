@@ -90,15 +90,20 @@ class MenuScreen:
         bw = int(320 * scale)
         bh = int(56 * scale)
         bsp = int(8 * scale)
-        base_y = int(SCREEN_HEIGHT * 0.58)
+        h44 = int(44 * scale)
+        h48 = int(48 * scale)
+        base_y = int(SCREEN_HEIGHT * 0.65)
+        SETTINGS_OLIVE = (110, 95, 50)
+        SETTINGS_OLIVE_HOVER = (140, 122, 68)
         self.play_button = Button(cx, base_y, bw, bh, "Play", SWAP_GREEN, SWAP_GREEN_HOVER)
-        self.tutorial_button = Button(cx, base_y + bh + bsp, bw, int(48 * scale), "Tutorial", PEEK_BLUE, PEEK_BLUE_HOVER)
-        self.how_to_button = Button(cx, base_y + bh + int(48 * scale) + bsp * 2, bw, int(44 * scale), "How To Play", PAIR_TEAL, PAIR_TEAL_HOVER)
-        self.profile_button = Button(cx, base_y + bh + int(48 * scale) + int(44 * scale) + bsp * 3, bw, int(44 * scale), "Profile & Stats", DISCARD_ORANGE, DISCARD_ORANGE_HOVER)
-        self.quit_button = Button(cx, base_y + bh + int(48 * scale) + int(44 * scale) * 2 + bsp * 4, bw, int(44 * scale), "Quit", DECLARE_RED, DECLARE_RED_HOVER)
+        self.tutorial_button = Button(cx, base_y + bh + bsp, bw, h48, "Tutorial", PEEK_BLUE, PEEK_BLUE_HOVER)
+        self.how_to_button = Button(cx, base_y + bh + h48 + bsp * 2, bw, h44, "How To Play", PAIR_TEAL, PAIR_TEAL_HOVER)
+        self.profile_button = Button(cx, base_y + bh + h48 + h44 + bsp * 3, bw, h44, "Profile & Stats", DISCARD_ORANGE, DISCARD_ORANGE_HOVER)
+        self.settings_button = Button(cx, base_y + bh + h48 + h44 * 2 + bsp * 4, bw, h44, "Settings", SETTINGS_OLIVE, SETTINGS_OLIVE_HOVER)
+        self.quit_button = Button(cx, base_y + bh + h48 + h44 * 3 + bsp * 5, bw, h44, "Quit", DECLARE_RED, DECLARE_RED_HOVER)
         self.new_game_button = self.play_button
         self.buttons = [self.play_button, self.tutorial_button, self.how_to_button,
-                        self.profile_button, self.quit_button]
+                        self.profile_button, self.settings_button, self.quit_button]
         self._t = 0.0
 
     def _draw_card_back_medallion(self, surface, cx, cy, scale=1.0):
@@ -134,6 +139,57 @@ class MenuScreen:
         pygame.draw.polygon(surface, hi, inner_diamond, 1)
         dot = pygame.Rect(cx - 2, cy - 2, 4, 4)
         pygame.draw.rect(surface, hi, dot, border_radius=1)
+
+    def _compute_card_fan(self, t):
+        """Return [(dx, cy, angle), ...] for the 5 fanned menu cards.
+
+        Plays a one-shot shuffle on menu open (collapse to stack, riffle,
+        fan back out, ~2.1s total) then settles into idle breathing forever."""
+        import math as _math
+        BASE = [(-288, 712, -16), (-144, 696, -8), (0, 688, 0),
+                (144, 696, 8), (288, 712, 16)]
+        STACK_X, STACK_Y = 0.0, 688.0
+        INTRO_END = 0.3
+        COLLAPSE_END = 0.8
+        RIFFLE_END = 1.5
+        FAN_END = 2.1
+
+        out = []
+        for i, (bx, by, ba) in enumerate(BASE):
+            breath = t * 1.2 + i * 0.6
+            sway_x = _math.sin(breath) * 2.5
+            sway_y = _math.cos(breath * 0.85) * 1.8
+            sway_a = _math.sin(breath * 0.7) * 0.6
+
+            if t < INTRO_END:
+                cx, cy, ang = bx, by, ba
+            elif t < COLLAPSE_END:
+                k = (t - INTRO_END) / (COLLAPSE_END - INTRO_END)
+                ke = k * k * (3 - 2 * k)
+                cx = bx * (1 - ke) + STACK_X * ke
+                cy = by * (1 - ke) + STACK_Y * ke
+                ang = ba * (1 - ke)
+            elif t < RIFFLE_END:
+                k = (t - COLLAPSE_END) / (RIFFLE_END - COLLAPSE_END)
+                SIDE = (-1, -1, 0, 1, 1)
+                SPREAD = (115, 55, 0, 55, 115)
+                HEIGHT = (60, 78, 70, 78, 60)
+                PHASE = (0.00, 0.10, 0.05, 0.10, 0.00)
+                k_p = max(0.0, min(1.0, (k - PHASE[i]) / max(0.01, 1.0 - PHASE[i])))
+                arc = _math.sin(k_p * _math.pi)
+                cx = STACK_X + SIDE[i] * SPREAD[i] * arc
+                cy = STACK_Y - HEIGHT[i] * arc
+                ang = SIDE[i] * 14 * arc
+            elif t < FAN_END:
+                k = (t - RIFFLE_END) / (FAN_END - RIFFLE_END)
+                ke = k * k * (3 - 2 * k)
+                cx = STACK_X * (1 - ke) + bx * ke
+                cy = STACK_Y * (1 - ke) + by * ke
+                ang = ba * ke
+            else:
+                cx, cy, ang = bx + sway_x, by + sway_y, ba + sway_a
+            out.append((cx, cy, ang))
+        return out
 
     def _draw_menu_card_back(self, cx, cy, angle=0):
         surf = pygame.Surface((CARD_WIDTH + 20, CARD_HEIGHT + 20), pygame.SRCALPHA)
@@ -173,25 +229,38 @@ class MenuScreen:
 
         # lamp glow removed
 
-        card_fan = [(-180, 380, -16), (-90, 370, -8), (0, 365, 0), (90, 370, 8), (180, 380, 16)]
-        for dx, cy, angle in card_fan:
-            cx = SCREEN_WIDTH // 2 + dx
-            back_surf = card_render.paint_back("classic", CARD_WIDTH, CARD_HEIGHT)
-            scaled = pygame.transform.smoothscale(back_surf, (int(CARD_WIDTH * 1.4), int(CARD_HEIGHT * 1.4)))
-            if angle:
-                scaled = pygame.transform.rotate(scaled, angle)
-            silhouette = scaled.copy()
+        back_surf = card_render.paint_back("classic", CARD_WIDTH, CARD_HEIGHT)
+        target_w = int(CARD_WIDTH * 1.4)
+        target_h = int(CARD_HEIGHT * 1.4)
+        if getattr(self, '_card_back_src', None) is not back_surf:
+            self._card_back_src = back_surf
+            self._card_back_scaled = pygame.transform.smoothscale(back_surf, (target_w, target_h))
+            silhouette = self._card_back_scaled.copy()
             silhouette.fill((0, 0, 0, 255), special_flags=pygame.BLEND_RGBA_MULT)
-            sw, sh = silhouette.get_size()
-            blur_w = max(1, sw // 5)
-            blur_h = max(1, sh // 5)
-            soft = pygame.transform.smoothscale(
-                pygame.transform.smoothscale(silhouette, (blur_w, blur_h)),
-                (sw, sh),
+            blur = pygame.transform.smoothscale(
+                pygame.transform.smoothscale(
+                    silhouette, (max(1, target_w // 5), max(1, target_h // 5))
+                ),
+                (target_w, target_h),
             )
-            soft.set_alpha(110)
-            self.screen.blit(soft, (cx - sw // 2 + 3, cy - sh // 2 + 6))
-            self.screen.blit(scaled, (cx - scaled.get_width() // 2, cy - scaled.get_height() // 2))
+            blur.set_alpha(110)
+            self._card_back_shadow = blur
+        base = self._card_back_scaled
+        shadow_src = self._card_back_shadow
+
+        for dx, cy_f, angle in self._compute_card_fan(self._t):
+            cx = SCREEN_WIDTH // 2 + int(dx)
+            cy = int(cy_f)
+            if abs(angle) > 0.05:
+                scaled = pygame.transform.rotate(base, angle)
+                shadow = pygame.transform.rotate(shadow_src, angle)
+            else:
+                scaled = base
+                shadow = shadow_src
+            sw, sh = shadow.get_size()
+            self.screen.blit(shadow, (cx - sw // 2 + 3, cy - sh // 2 + 6))
+            sw2, sh2 = scaled.get_size()
+            self.screen.blit(scaled, (cx - sw2 // 2, cy - sh2 // 2))
 
         for offset, alpha in ((6, 60), (3, 110), (0, 255)):
             t_color = th.brass_300 if alpha == 255 else th.brass_700
@@ -214,7 +283,7 @@ class MenuScreen:
 
         subtitle_surf = self.subtitle_font.render("A Card Game of Memory & Strategy",
                                                    True, th.text_dim)
-        self.screen.blit(subtitle_surf, subtitle_surf.get_rect(center=(SCREEN_WIDTH // 2, 240)))
+        self.screen.blit(subtitle_surf, subtitle_surf.get_rect(center=(SCREEN_WIDTH // 2, 400)))
 
         for button in self.buttons:
             button.draw(self.screen, self.button_font)
@@ -236,6 +305,8 @@ class MenuScreen:
                 return 'how_to_play'
             if self.profile_button.is_clicked(event.pos):
                 return 'profile'
+            if self.settings_button.is_clicked(event.pos):
+                return 'settings'
             if self.quit_button.is_clicked(event.pos):
                 return 'quit'
         if event.type == pygame.KEYDOWN:
@@ -738,12 +809,12 @@ class GameOverScreen:
         self.button_font = typo.body_bold(int(UI_FONT_SIZE * scale))
         self.score_font = typo.display_bold(int(UI_FONT_SIZE * 1.4))
         self.small_font = typo.body(SMALL_FONT_SIZE)
-        bw = int(280 * scale)
-        bh = int(52 * scale)
+        bw = int(440 * scale)
+        bh = int(80 * scale)
         by = int(SCREEN_HEIGHT * 0.88)
-        self.play_again_button = Button(SCREEN_WIDTH // 2 - bw // 2 - 10, by, bw, bh, "Play Again",
+        self.play_again_button = Button(SCREEN_WIDTH // 2 - bw // 2 - 16, by, bw, bh, "Play Again",
                                         SWAP_GREEN, SWAP_GREEN_HOVER)
-        self.menu_button = Button(SCREEN_WIDTH // 2 + bw // 2 + 10, by, bw, bh, "Main Menu",
+        self.menu_button = Button(SCREEN_WIDTH // 2 + bw // 2 + 16, by, bw, bh, "Main Menu",
                                   DECLARE_RED, DECLARE_RED_HOVER)
         self.buttons = [self.play_again_button, self.menu_button]
         self._bg_cache = None

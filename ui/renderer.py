@@ -13,6 +13,9 @@ from config import (SCREEN_WIDTH, SCREEN_HEIGHT, BG_GREEN, BG_DARK, CARD_WHITE, 
     LOG_PANEL_X, LOG_PANEL_Y, LOG_PANEL_W, LOG_PANEL_H,
     CARD_FONT_SIZE, CARD_BIG_FONT_SIZE, TITLE_FONT_SIZE, SUBTITLE_FONT_SIZE,
     UI_FONT_SIZE, LOG_FONT_SIZE, SMALL_FONT_SIZE,
+    STATUS_LABEL_FONT_SIZE, STATUS_NAME_FONT_SIZE,
+    NAMEPLATE_FONT_SIZE, NAMEPLATE_SUB_FONT_SIZE,
+    STACK_LABEL_FONT_SIZE, LOG_HEADER_FONT_SIZE, LOG_SUB_FONT_SIZE,
     POWER_LABELS, POWER_COLORS, HAND_SIZE,
     CARD_GRID_SPACING_X, CARD_GRID_SPACING_Y, PLAYER_AREA_PADDING,
     ANIM_DRAW_DURATION, ANIM_SWAP_DURATION, ANIM_UNSEEN_SWAP_DURATION,
@@ -83,12 +86,23 @@ class Renderer:
         self.subtitle_font = typo.header(SUBTITLE_FONT_SIZE)
         self.ui_font = typo.body_bold(UI_FONT_SIZE)
         self.log_font = typo.body(LOG_FONT_SIZE)
+        self.log_sub_font = typo.body(LOG_SUB_FONT_SIZE)
         self.small_font = typo.body(SMALL_FONT_SIZE)
+        # Display-family roles (Cinzel) for headers, nameplates, and stack labels.
+        # These are the "hero" type slots — used where the player should feel weight.
+        self.display_label_font = typo.display_bold(STATUS_LABEL_FONT_SIZE)
+        self.display_name_font = typo.display(STATUS_NAME_FONT_SIZE)
+        self.nameplate_font = typo.display_bold(NAMEPLATE_FONT_SIZE)
+        self.nameplate_sub_font = typo.body(NAMEPLATE_SUB_FONT_SIZE)
+        self.stack_label_font = typo.display_bold(STACK_LABEL_FONT_SIZE)
         self.hovered_card = None
         self.hovered_button = None
         self.hovered_slot = None
         self.peek_reveal = None
         self._pulse_time = 0.0
+        # Per-button hover-start timestamps (ms). Cleared the moment the mouse
+        # leaves the button. After ~400 ms we show a tooltip describing the action.
+        self._action_hover_start = {}
         self.animation_queue = AnimationQueue()
         self.dragging_card = None
         self.drag_pos = None
@@ -99,6 +113,8 @@ class Renderer:
         self.screen.fill(BG_GREEN)
         self._draw_table_felt()
         self._draw_status_bar(game_manager)
+        self._draw_center_stack_groundplate()
+        self._draw_pile_halo(game_manager)
         self.draw_discard(game_manager.discard_pile)
         self.draw_deck(game_manager.deck.remaining if game_manager.deck else 0)
         if game_manager.drawn_card:
@@ -113,7 +129,8 @@ class Renderer:
         self.draw_peek_reveal()
         if game_settings := self.game_settings:
             if game_settings.show_game_log:
-                self.draw_game_log(game_manager.game_log)
+                self.draw_game_log(game_manager.game_log,
+                                   round_number=game_manager.round_number)
         if action_buttons:
             self._draw_action_bar_container()
             self.draw_action_buttons(action_buttons)
@@ -133,45 +150,109 @@ class Renderer:
             r = int(th.brass_900[0] * (0.40 + 0.30 * t))
             g = int(th.brass_900[1] * (0.40 + 0.30 * t))
             b = int(th.brass_900[2] * (0.40 + 0.30 * t))
-            pygame.draw.line(container_surf, (r, g, b, 230), (0, i), (container_rect.width, i))
+            pygame.draw.line(container_surf, (r, g, b, 240), (0, i), (container_rect.width, i))
         mask = pygame.Surface(container_surf.get_size(), pygame.SRCALPHA)
         pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=10)
         container_surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         self.screen.blit(container_surf, container_rect.topleft)
+
+        # Top edge: thicker brass highlight band so the action rail visually
+        # "attaches" to the felt above instead of floating.
+        pygame.draw.line(self.screen, th.brass_300,
+                         (0, container_rect.top),
+                         (SCREEN_WIDTH, container_rect.top), 2)
         pygame.draw.line(self.screen, th.brass_500,
-                         (0, container_rect.top + 1),
-                         (SCREEN_WIDTH, container_rect.top + 1), 1)
+                         (0, container_rect.top + 2),
+                         (SCREEN_WIDTH, container_rect.top + 2), 1)
+
+        # Decorative brass studs every 200 px along the top edge.
+        stud_y = container_rect.top + 6
+        for sx in range(120, SCREEN_WIDTH, 200):
+            pygame.draw.circle(self.screen, th.brass_500, (sx, stud_y), 4)
+            pygame.draw.circle(self.screen, th.brass_900, (sx, stud_y), 4, 1)
+            pygame.draw.circle(self.screen, th.brass_300, (sx - 1, stud_y - 1), 1)
+
         pygame.draw.rect(self.screen, th.brass_700, container_rect, 1, border_radius=10)
 
     def _draw_table_felt(self):
         th = theme_mod.active()
-        if not hasattr(self, "_felt_cache") or self._felt_theme_key != th.name:
+        gs = self.game_settings
+        atmo = bool(getattr(gs, 'atmospheric_lighting', True)) if gs else True
+        cache_key = (th.name, atmo)
+        if not hasattr(self, "_felt_cache") or self._felt_theme_key != cache_key:
             self._felt_cache = self._build_felt_cache()
-            self._felt_theme_key = th.name
+            self._felt_theme_key = cache_key
         self.screen.blit(self._felt_cache, (0, 0))
 
     def _build_felt_cache(self):
         import random as _r
         th = theme_mod.active()
         out = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        out.fill(th.felt_rim)
+        # Outside-oval room shadow (darker than the felt rim itself).
+        shadow_col = getattr(th, "felt_shadow", th.felt_rim)
+        out.fill(shadow_col)
 
         center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
         rx, ry = 1120, 608
+        # The pendant lamp hangs slightly above the geometric center of the table —
+        # the brightest pool of light is offset upward by ~3% of ry.
+        lamp_cx, lamp_cy = center[0], center[1] - int(ry * 0.03)
 
-        radial = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        for layer in range(40, 0, -1):
-            t = layer / 40
-            r = (
-                int(th.felt_rim[0] + (th.felt_mid[0] - th.felt_rim[0]) * (1 - t)),
-                int(th.felt_rim[1] + (th.felt_mid[1] - th.felt_rim[1]) * (1 - t)),
-                int(th.felt_rim[2] + (th.felt_mid[2] - th.felt_rim[2]) * (1 - t)),
+        # Pass 1 — felt body: rim-to-mid radial gradient, properly alpha-composited.
+        # We draw progressively smaller filled ellipses from edge color to center color,
+        # which avoids the BLEND_MAX trick (which couldn't truly darken the rim).
+        felt_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        steps = 48
+        for layer in range(steps, 0, -1):
+            t = layer / steps  # 1.0 → ~0
+            # Ease-out so the bright center occupies more area than a linear ramp.
+            ease = 1.0 - (1.0 - t) * (1.0 - t)
+            col = (
+                int(th.felt_rim[0] + (th.felt_mid[0] - th.felt_rim[0]) * (1 - ease)),
+                int(th.felt_rim[1] + (th.felt_mid[1] - th.felt_rim[1]) * (1 - ease)),
+                int(th.felt_rim[2] + (th.felt_mid[2] - th.felt_rim[2]) * (1 - ease)),
+                255,
             )
-            pygame.draw.ellipse(radial, r,
-                                pygame.Rect(center[0] - int(rx * t), center[1] - int(ry * t),
-                                            int(rx * t * 2), int(ry * t * 2)))
-        out.blit(radial, (0, 0), special_flags=pygame.BLEND_RGBA_MAX)
+            sx = int(rx * t)
+            sy = int(ry * t)
+            pygame.draw.ellipse(
+                felt_layer, col,
+                pygame.Rect(center[0] - sx, center[1] - sy, sx * 2, sy * 2),
+            )
+        out.blit(felt_layer, (0, 0))
 
+        # Pass 2 — warm lamp pool: bright pendant glow centered on (lamp_cx, lamp_cy),
+        # masked to the oval so it never spills onto the room shadow.
+        # Skipped when:
+        #   - high contrast mode is on,
+        #   - the active theme is non-atmospheric (e.g. Minimal), or
+        #   - the player has turned off the atmospheric lighting setting.
+        gs = self.game_settings
+        atmo_setting = bool(getattr(gs, 'atmospheric_lighting', True)) if gs else True
+        theme_atmo = getattr(th, "is_atmospheric", True)
+        if not getattr(th, "high_contrast", False) and atmo_setting and theme_atmo:
+            lamp_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            pool_radius = int(rx * 0.62)
+            pool_steps = 56
+            for i in range(pool_steps, 0, -1):
+                t = i / pool_steps  # 1.0 outer → ~0 inner
+                # Quadratic falloff so the pool has a soft edge but a hot core.
+                intensity = (1 - t) ** 1.7
+                a = int(intensity * 78)
+                if a <= 0:
+                    continue
+                r_pool = int(pool_radius * t)
+                pygame.draw.circle(lamp_layer, (*th.lamp_glow, a),
+                                   (lamp_cx, lamp_cy), r_pool)
+            # Clip the lamp pool to the felt oval.
+            mask = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            pygame.draw.ellipse(mask, (255, 255, 255, 255),
+                                pygame.Rect(center[0] - rx, center[1] - ry, rx * 2, ry * 2))
+            lamp_layer.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            out.blit(lamp_layer, (0, 0))
+
+        # Pass 3 — wear speckles, denser at the rim and sparser in the lit pool
+        # (the lamp washes out fine texture in the bright zone).
         rng = _r.Random(42)
         wear = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         for _ in range(900):
@@ -179,7 +260,15 @@ class Renderer:
             py = rng.randint(0, SCREEN_HEIGHT)
             dx = (px - center[0]) / rx
             dy = (py - center[1]) / ry
-            if dx * dx + dy * dy > 1:
+            d2 = dx * dx + dy * dy
+            if d2 > 1:
+                continue
+            # Distance from lamp center (normalized to oval scale).
+            ldx = (px - lamp_cx) / (rx * 0.62)
+            ldy = (py - lamp_cy) / (ry * 0.62)
+            ld2 = ldx * ldx + ldy * ldy
+            if ld2 < 1.0 and rng.random() < (1.0 - ld2) * 0.55:
+                # In the bright pool, drop ~half the speckles for cleaner highlights.
                 continue
             a = rng.randint(6, 18)
             sz = rng.choice((1, 1, 1, 2))
@@ -190,31 +279,412 @@ class Renderer:
             pygame.draw.circle(wear, cc, (px, py), sz)
         out.blit(wear, (0, 0))
 
+        # Pass 4 — concentric inner guide rings (very subtle felt seam lines).
         for i in range(8):
             t = i / 8
             inset = int(80 * t)
-            pygame.draw.ellipse(out, (*th.felt_rim, ),
+            pygame.draw.ellipse(out, th.felt_rim,
                                 pygame.Rect(center[0] - rx - inset, center[1] - ry - inset,
                                             (rx + inset) * 2, (ry + inset) * 2),
                                 1)
 
+        # Pass 5 — heavier brass border. Outer dark band, mid bright band, inner highlight.
         pygame.draw.ellipse(out, th.brass_700,
-                            pygame.Rect(center[0] - rx, center[1] - ry, rx * 2, ry * 2), 2)
+                            pygame.Rect(center[0] - rx, center[1] - ry, rx * 2, ry * 2), 3)
         pygame.draw.ellipse(out, th.brass_500,
-                            pygame.Rect(center[0] - rx - 4, center[1] - ry - 4,
-                                        rx * 2 + 8, ry * 2 + 8), 1)
+                            pygame.Rect(center[0] - rx - 5, center[1] - ry - 5,
+                                        rx * 2 + 10, ry * 2 + 10), 2)
+        pygame.draw.ellipse(out, th.brass_300,
+                            pygame.Rect(center[0] - rx + 3, center[1] - ry + 3,
+                                        rx * 2 - 6, ry * 2 - 6), 1)
 
-        for ring in (rx + 12, rx + 18):
-            pygame.draw.ellipse(out, (*th.brass_900, ),
+        for ring in (rx + 14, rx + 22):
+            pygame.draw.ellipse(out, th.brass_900,
                                 pygame.Rect(center[0] - ring, center[1] - int(ry * ring / rx),
                                             ring * 2, int(ry * ring / rx) * 2), 1)
 
-        seal_font = typo.display_bold(30)
-        seal = seal_font.render("D", True, (*th.brass_900, ))
-        seal.set_alpha(40)
+        # Pass 6 — brass cardinal ornaments. East/West sit cleanly on the rim;
+        # we skip North/South because the status bar (top) and action bar (bottom)
+        # overlap them, and North-East would collide with the game-log panel.
+        # Two ornaments + the center seal forms a visual axis line across the table.
+        for sx in (-1, 1):
+            ox = center[0] + int(sx * rx * 0.985)
+            oy = center[1]
+            self._draw_brass_ornament(out, ox, oy, th)
+
+        # Pass 7 — large center "D" seal: a watermark, not a label. Cinzel Bold, alpha 55.
+        seal_font = typo.display_bold(96)
+        seal = seal_font.render("D", True, th.brass_900)
+        seal.set_alpha(55)
         out.blit(seal, seal.get_rect(center=center))
 
         return out
+
+    def _draw_hand_pool(self, cx, cy):
+        """Faint elliptical lamp pool under a player's hand area."""
+        th = theme_mod.active()
+        pool_w = 820
+        pool_h = 260
+        pool = pygame.Surface((pool_w, pool_h), pygame.SRCALPHA)
+        layers = 18
+        for i in range(layers, 0, -1):
+            t = i / layers
+            a = int(26 * (1 - t) ** 1.4)
+            if a <= 0:
+                continue
+            ew = int(pool_w * t)
+            eh = int(pool_h * t)
+            pygame.draw.ellipse(
+                pool, (*th.lamp_glow, a),
+                pygame.Rect((pool_w - ew) // 2, (pool_h - eh) // 2, ew, eh),
+            )
+        self.screen.blit(pool, (cx - pool_w // 2, cy - pool_h // 2))
+
+    def _draw_center_stack_groundplate(self):
+        """Faint elliptical brass-tinted glow under the deck/discard/drawn cluster.
+        Reads as 'the felt is worn here from play.' Drawn between the felt and the cards
+        so it tints the felt rather than overlaying the piles."""
+        th = theme_mod.active()
+        deck_x, _ = DECK_CENTER
+        drawn_x, _ = DRAWN_CARD_POS
+        center_x = (deck_x + drawn_x) // 2
+        center_y = DECK_CENTER[1] + 8
+        ellipse_w = 880
+        ellipse_h = 280
+        plate = pygame.Surface((ellipse_w, ellipse_h), pygame.SRCALPHA)
+        # Paint progressively smaller ellipses with rising alpha so the falloff
+        # is soft at the edges.
+        layers = 24
+        for i in range(layers, 0, -1):
+            t = i / layers
+            a = int(38 * (1 - t) ** 1.4)
+            if a <= 0:
+                continue
+            ew = int(ellipse_w * t)
+            eh = int(ellipse_h * t)
+            pygame.draw.ellipse(
+                plate, (*th.brass_500, a),
+                pygame.Rect((ellipse_w - ew) // 2, (ellipse_h - eh) // 2, ew, eh),
+            )
+        self.screen.blit(plate, (center_x - ellipse_w // 2, center_y - ellipse_h // 2))
+
+    def _draw_pile_halo(self, game_manager):
+        """Sine-pulsed halo around whichever pile the player can act on right now.
+        - TURN_START: deck halo (you need to draw)
+        - DECIDE with drawn card: drawn-card halo (you need to decide)
+        - REACTION_WINDOW: discard halo (you might need to react)"""
+        th = theme_mod.active()
+        active_pos = None
+        if game_manager.state == GameState.TURN_START:
+            active_pos = DECK_CENTER
+        elif game_manager.state == GameState.DECIDE and game_manager.drawn_card is not None:
+            active_pos = DRAWN_CARD_POS
+        elif game_manager.state == GameState.REACTION_WINDOW:
+            active_pos = DISCARD_POS
+        if active_pos is None:
+            return
+        cx, cy = active_pos
+        # Sine pulse 1Hz.
+        t = (math.sin(self._pulse_time * 2 * math.pi) + 1) * 0.5
+        base_alpha = int(50 + 60 * t)
+        halo_w = CARD_WIDTH + 48
+        halo_h = CARD_HEIGHT + 48
+        halo = pygame.Surface((halo_w, halo_h), pygame.SRCALPHA)
+        for i in range(20, 0, -2):
+            a = int(base_alpha * (i / 20) ** 1.6)
+            if a <= 0:
+                continue
+            inset = 24 - i
+            pygame.draw.rect(
+                halo, (*th.brass_300, a),
+                pygame.Rect(inset, inset, halo_w - inset * 2, halo_h - inset * 2),
+                1, border_radius=CORNER_RADIUS + 4,
+            )
+        self.screen.blit(halo, (cx - halo_w // 2, cy - halo_h // 2))
+
+    def _draw_stack_label(self, cx, cy, label, value):
+        """Brass-edged pill showing 'LABEL · VALUE' (e.g. 'DECK · 43')."""
+        th = theme_mod.active()
+        label_text = f"{label} · {value}"
+        font = self.stack_label_font
+        text = font.render(label_text, True, th.text_white)
+        pad_x = 14
+        pad_y = 6
+        pill_w = text.get_width() + pad_x * 2
+        pill_h = text.get_height() + pad_y * 2
+        pill_x = cx - pill_w // 2
+        pill_y = cy - pill_h // 2
+
+        # Body: brass_900 → brass_700 vertical gradient, semi-translucent.
+        pill = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
+        for i in range(pill_h):
+            t = i / max(1, pill_h - 1)
+            r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * t)
+            g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * t)
+            b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * t)
+            pygame.draw.line(pill, (r, g, b, 220), (0, i), (pill_w, i))
+        mask = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(),
+                         border_radius=pill_h // 2)
+        pill.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        self.screen.blit(pill, (pill_x, pill_y))
+
+        # Top highlight + outline.
+        pygame.draw.line(self.screen, th.brass_300,
+                         (pill_x + 8, pill_y + 1),
+                         (pill_x + pill_w - 8, pill_y + 1), 1)
+        pygame.draw.rect(self.screen, th.brass_500,
+                         pygame.Rect(pill_x, pill_y, pill_w, pill_h),
+                         1, border_radius=pill_h // 2)
+        self.screen.blit(text, (pill_x + pad_x, pill_y + pad_y))
+
+    def _draw_ribbon(self, cx, top_y, label, accent_color=None):
+        """Bunting-shaped ribbon banner. Used above the drawn card.
+        Slight vertical bob (sine ±2px) when motion is enabled."""
+        th = theme_mod.active()
+        body_color = accent_color if accent_color is not None else th.brass_500
+        font = typo.display_bold(28)
+        text = font.render(label, True, th.text_white)
+
+        pad_x = 22
+        pad_y = 8
+        notch = 12
+        body_w = text.get_width() + pad_x * 2
+        body_h = text.get_height() + pad_y * 2
+
+        # Vertical bob — only if motion is enabled.
+        bob = 0
+        ms = th.motion_scale
+        if ms > 0.1:
+            bob = int(math.sin(self._pulse_time * 2.4) * 2 * ms)
+
+        ribbon_x = cx - body_w // 2
+        ribbon_y = top_y - body_h + bob
+
+        # Bunting shape: rectangle with notched bottom corners, plus two side tails.
+        ribbon = pygame.Surface((body_w + notch * 2, body_h + notch), pygame.SRCALPHA)
+        # Side tails — flagging outward and downward at each end.
+        left_tail = [
+            (0, body_h // 2),
+            (notch + 4, 2),
+            (notch + 4, body_h - 2),
+        ]
+        right_tail = [
+            (body_w + notch * 2, body_h // 2),
+            (body_w + notch - 4, 2),
+            (body_w + notch - 4, body_h - 2),
+        ]
+        pygame.draw.polygon(ribbon, body_color, left_tail)
+        pygame.draw.polygon(ribbon, body_color, right_tail)
+
+        # Main body with notched bottom.
+        body_pts = [
+            (notch, 0),
+            (notch + body_w, 0),
+            (notch + body_w, body_h - notch),
+            (notch + body_w - notch, body_h),
+            (notch + notch, body_h),
+            (notch, body_h - notch),
+        ]
+        pygame.draw.polygon(ribbon, body_color, body_pts)
+
+        # Top highlight band.
+        pygame.draw.line(ribbon, th.brass_300,
+                         (notch + 4, 2), (notch + body_w - 4, 2), 1)
+        # Dark outline trace.
+        pygame.draw.lines(ribbon, th.brass_900, True, body_pts, 1)
+
+        self.screen.blit(ribbon, (ribbon_x - notch, ribbon_y))
+        self.screen.blit(text, (ribbon_x + pad_x, ribbon_y + pad_y))
+
+    def _draw_state_medallion(self, state, state_label):
+        """Right-side circular state token. Outer ring color encodes state category:
+            - red:  declare resolution (the moment of truth)
+            - cyan: reaction window (you might need to act fast)
+            - blue: power resolution
+            - green: pair check
+            - brass: everything else
+        Label sits to the left of the token in Cinzel."""
+        th = theme_mod.active()
+
+        # State category → outer ring color.
+        ring_color_map = {
+            GameState.RESOLVE_DECLARE: th.signal_stop,
+            GameState.REACTION_WINDOW: th.signal_info,
+            GameState.POWER_RESOLVE: th.peek_blue,
+            GameState.PAIR_CHECK: th.signal_go,
+            GameState.GAME_OVER: th.brass_700,
+        }
+        ring_col = ring_color_map.get(state, th.brass_300)
+
+        diameter = 50
+        radius = diameter // 2
+        right_pad = 14
+        cx = SCREEN_WIDTH - right_pad - radius
+        cy = STATUS_BAR_H // 2
+
+        # Outer state-color ring (3px).
+        pygame.draw.circle(self.screen, ring_col, (cx, cy), radius)
+        # Mid brass band (2px in).
+        pygame.draw.circle(self.screen, th.brass_500, (cx, cy), radius - 3)
+        # Inner radial fill: brass_900 → brass_700 from center out.
+        for i in range(radius - 5, 0, -1):
+            t = 1 - (i / max(1, radius - 5))
+            r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * t)
+            g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * t)
+            b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * t)
+            pygame.draw.circle(self.screen, (r, g, b), (cx, cy), i)
+        # Inner highlight (top-left).
+        hl = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
+        pygame.draw.circle(hl, (*th.brass_300, 60),
+                           (radius - 5, radius - 5), max(2, radius // 3))
+        self.screen.blit(hl, (cx - radius, cy - radius))
+
+        # Center glyph — first letter of the state in Cinzel.
+        glyph_letter = state_label.split(" ")[0][:1].upper() if state_label else "?"
+        glyph_font = typo.display_bold(24)
+        glyph_surf = glyph_font.render(glyph_letter, True, th.brass_300)
+        self.screen.blit(glyph_surf, glyph_surf.get_rect(center=(cx, cy)))
+
+        # Label to the left of the medallion, in Cinzel-Bold, color-matched.
+        label_font = typo.display_bold(22)
+        label_surf = label_font.render(state_label.upper(), True, ring_col)
+        label_x = cx - radius - 12 - label_surf.get_width()
+        label_y = (STATUS_BAR_H - label_surf.get_height()) // 2
+        self.screen.blit(label_surf, (label_x, label_y))
+
+    def _draw_nameplate(self, cx, cy, player, is_current, is_human):
+        """Brass-trimmed plate showing avatar + name + card count.
+        Active player gets a pulsing brass glow ring.
+        Human player gets a small cyan 'YOU' chip on the right edge."""
+        th = theme_mod.active()
+
+        name_text = player.name
+        sub_text = f"Cards: {player.card_count}"
+
+        plate_h = 72
+        avatar_d = 56
+        pad_l = 14
+        gap = 14
+        pad_r = 14
+
+        name_font = typo.display_bold(28)
+        sub_font = typo.body(NAMEPLATE_SUB_FONT_SIZE)
+        you_font = typo.body_bold(18)
+
+        name_surf = name_font.render(name_text, True, th.text_white)
+        sub_surf = sub_font.render(sub_text, True, th.text_dim)
+
+        you_chip_w = 0
+        you_chip_h = 26
+        you_surf = None
+        if is_human:
+            you_surf = you_font.render("YOU", True, th.brass_900)
+            you_chip_w = you_surf.get_width() + 18
+
+        text_block_w = max(name_surf.get_width(), sub_surf.get_width())
+        plate_w = pad_l + avatar_d + gap + text_block_w + pad_r + (you_chip_w + 8 if you_chip_w else 0)
+        # Clamp so very long names don't blow out the layout.
+        plate_w = max(240, min(plate_w, 420))
+
+        plate_x = cx - plate_w // 2
+        plate_y = cy - plate_h // 2
+
+        # Outer pulsing brass glow ring for the active player.
+        if is_current:
+            t = (math.sin(self._pulse_time * 1.6) + 1) * 0.5
+            ring_alpha = int(70 + 50 * t)
+            ring_pad = 14
+            ring = pygame.Surface(
+                (plate_w + ring_pad * 2, plate_h + ring_pad * 2), pygame.SRCALPHA
+            )
+            for i in range(ring_pad, 0, -2):
+                a = int(ring_alpha * (i / ring_pad) ** 1.6)
+                pygame.draw.rect(
+                    ring, (*th.brass_300, a),
+                    pygame.Rect(ring_pad - i, ring_pad - i,
+                                plate_w + i * 2, plate_h + i * 2),
+                    1, border_radius=12 + i,
+                )
+            self.screen.blit(ring, (plate_x - ring_pad, plate_y - ring_pad))
+
+        # Plate body — brass_900→brass_700 vertical gradient, 8px corners.
+        plate = pygame.Surface((plate_w, plate_h), pygame.SRCALPHA)
+        for i in range(plate_h):
+            t = i / max(1, plate_h - 1)
+            # Top is darker, bottom slightly lighter — like an inset metal panel.
+            r = int(th.brass_900[0] + (th.brass_700[0] - th.brass_900[0]) * t)
+            g = int(th.brass_900[1] + (th.brass_700[1] - th.brass_900[1]) * t)
+            b = int(th.brass_900[2] + (th.brass_700[2] - th.brass_900[2]) * t)
+            pygame.draw.line(plate, (r, g, b, 240), (0, i), (plate_w, i))
+        # Round corners via mask.
+        mask = pygame.Surface((plate_w, plate_h), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=8)
+        plate.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        self.screen.blit(plate, (plate_x, plate_y))
+
+        # Top highlight + outline.
+        pygame.draw.line(self.screen, th.brass_300,
+                         (plate_x + 6, plate_y + 1),
+                         (plate_x + plate_w - 6, plate_y + 1), 1)
+        pygame.draw.rect(self.screen, th.brass_500,
+                         pygame.Rect(plate_x, plate_y, plate_w, plate_h),
+                         1, border_radius=8)
+
+        # Avatar circle.
+        ax = plate_x + pad_l + avatar_d // 2
+        ay = plate_y + plate_h // 2
+        pygame.draw.circle(self.screen, th.brass_900, (ax, ay), avatar_d // 2)
+        pygame.draw.circle(self.screen, (40, 70, 50), (ax, ay), avatar_d // 2 - 3)
+        pygame.draw.circle(self.screen, th.brass_300, (ax, ay), avatar_d // 2, 2)
+        initial_font = typo.display_bold(28)
+        initial_letter = (name_text[:1] or "?").upper()
+        initial_surf = initial_font.render(initial_letter, True, th.brass_300)
+        self.screen.blit(initial_surf, initial_surf.get_rect(center=(ax, ay)))
+
+        # Text block — name on top, "Cards: N" below.
+        text_x = plate_x + pad_l + avatar_d + gap
+        text_block_h = name_surf.get_height() + 2 + sub_surf.get_height()
+        text_top = plate_y + (plate_h - text_block_h) // 2
+        # Truncate name with an ellipsis if it would overflow.
+        max_text_w = plate_w - (text_x - plate_x) - pad_r - (you_chip_w + 8 if you_chip_w else 0)
+        if name_surf.get_width() > max_text_w:
+            text = name_text
+            while text and name_font.size(text + "…")[0] > max_text_w:
+                text = text[:-1]
+            name_surf = name_font.render(text + "…" if text else "…", True, th.text_white)
+        self.screen.blit(name_surf, (text_x, text_top))
+        self.screen.blit(sub_surf, (text_x, text_top + name_surf.get_height() + 2))
+
+        # "YOU" chip on the right edge for the human seat.
+        if you_surf is not None:
+            chip_x = plate_x + plate_w - pad_r - you_chip_w
+            chip_y = plate_y + (plate_h - you_chip_h) // 2
+            chip_bg = pygame.Surface((you_chip_w, you_chip_h), pygame.SRCALPHA)
+            pygame.draw.rect(chip_bg, th.you_cyan, chip_bg.get_rect(),
+                             border_radius=you_chip_h // 2)
+            pygame.draw.rect(chip_bg, th.brass_900, chip_bg.get_rect(),
+                             1, border_radius=you_chip_h // 2)
+            self.screen.blit(chip_bg, (chip_x, chip_y))
+            self.screen.blit(you_surf,
+                             you_surf.get_rect(center=(chip_x + you_chip_w // 2,
+                                                       chip_y + you_chip_h // 2)))
+
+    def _draw_brass_ornament(self, surface, cx, cy, th):
+        """Small inlaid brass diamond + compass pips. Reads as a period table fitting."""
+        # Outer diamond plate.
+        outer_pts = [(cx, cy - 16), (cx + 12, cy), (cx, cy + 16), (cx - 12, cy)]
+        pygame.draw.polygon(surface, th.brass_500, outer_pts)
+        pygame.draw.polygon(surface, th.brass_900, outer_pts, 1)
+        # Inner brighter diamond.
+        inner_pts = [(cx, cy - 9), (cx + 6, cy), (cx, cy + 9), (cx - 6, cy)]
+        pygame.draw.polygon(surface, th.brass_300, inner_pts)
+        # Center pip.
+        pygame.draw.circle(surface, th.brass_900, (cx, cy), 2)
+        # Compass pips at N/S/E/W of the ornament.
+        for dx, dy in ((0, -24), (0, 24), (-22, 0), (22, 0)):
+            pygame.draw.circle(surface, th.brass_500, (cx + dx, cy + dy), 2)
+            pygame.draw.circle(surface, th.brass_700, (cx + dx, cy + dy), 2, 1)
 
     def _draw_status_bar(self, game_manager):
         th = theme_mod.active()
@@ -243,25 +713,18 @@ class Renderer:
         initial_surf = self.small_font.render(current_player.name[0].upper(), True, th.brass_300)
         self.screen.blit(initial_surf, initial_surf.get_rect(center=avatar_rect.center))
 
-        round_surf = self.ui_font.render(f"Round {game_manager.round_number}", True, th.text_white)
+        round_surf = self.display_label_font.render(
+            f"Round {game_manager.round_number}", True, th.text_white)
         text_x = avatar_rect.right + 16
         self.screen.blit(round_surf, (text_x, (STATUS_BAR_H - round_surf.get_height()) // 2))
 
-        name_surf = self.ui_font.render(current_player.name, True, th.brass_300)
+        name_surf = self.display_name_font.render(current_player.name, True, th.brass_300)
         name_x = text_x + round_surf.get_width() + 20
         self.screen.blit(name_surf, (name_x, (STATUS_BAR_H - name_surf.get_height()) // 2))
 
-        chip_text = state_label.upper()
-        chip_surf = self.small_font.render(chip_text, True, th.brass_900)
-        chip_w = chip_surf.get_width() + 20
-        chip_h = STATUS_BAR_H - 14
-        chip_x = SCREEN_WIDTH - chip_w - 14
-        chip_y = (STATUS_BAR_H - chip_h) // 2
-        chip_bg = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
-        pygame.draw.rect(chip_bg, th.brass_300, chip_bg.get_rect(), border_radius=chip_h // 2)
-        pygame.draw.rect(chip_bg, th.brass_500, chip_bg.get_rect(), 1, border_radius=chip_h // 2)
-        self.screen.blit(chip_bg, (chip_x, chip_y))
-        self.screen.blit(chip_surf, (chip_x + 10, chip_y + (chip_h - chip_surf.get_height()) // 2))
+        # State medallion (right side) — circular brass token + Cinzel label.
+        # The outer ring color signals state category at a glance.
+        self._draw_state_medallion(game_manager.state, state_label)
 
     def draw_card_face(self, x, y, card, selected=False, hovered=False, show_power_label=False, show_pips=True):
         rect = pygame.Rect(x, y, CARD_WIDTH, CARD_HEIGHT)
@@ -441,19 +904,46 @@ class Renderer:
         back = card_render.paint_back(style=style, w=CARD_WIDTH, h=CARD_HEIGHT)
         self.screen.blit(back, (x, y + lift_y))
 
+        # Static specular highlight band — a soft warm gleam in the top-left
+        # corner of the card back, sells "lit by overhead lamp." Subtle.
+        th = theme_mod.active()
+        if not getattr(th, "high_contrast", False):
+            spec = pygame.Surface((CARD_WIDTH, CARD_HEIGHT), pygame.SRCALPHA)
+            for i in range(20, 0, -1):
+                a = int(i * 2.2)
+                if a <= 0:
+                    continue
+                pygame.draw.circle(
+                    spec, (*th.lamp_glow, a),
+                    (int(CARD_WIDTH * 0.28), int(CARD_HEIGHT * 0.18)),
+                    int(CARD_WIDTH * 0.28 * (i / 20)),
+                )
+            # Mask to card rounded shape so the gleam doesn't bleed past edges.
+            shape = pygame.Surface((CARD_WIDTH, CARD_HEIGHT), pygame.SRCALPHA)
+            pygame.draw.rect(shape, (255, 255, 255, 255), shape.get_rect(),
+                             border_radius=CORNER_RADIUS)
+            spec.blit(shape, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+            self.screen.blit(spec, (x, y + lift_y))
+
         if hovered:
             t = pygame.time.get_ticks() / 1000.0
             shimmer = card_render.paint_back_glow(style, CARD_WIDTH, CARD_HEIGHT, t)
             self.screen.blit(shimmer, (x, y + lift_y), special_flags=pygame.BLEND_RGBA_ADD)
 
         if has_known_marker:
-            badge_x = x + CARD_WIDTH - 14
-            badge_y = y + 4 + lift_y
-            pygame.draw.circle(self.screen, GOLD, (badge_x, badge_y + 5), 7)
-            pygame.draw.circle(self.screen, (255, 230, 80), (badge_x, badge_y + 5), 5)
-            tri_pts = [(badge_x - 3, badge_y + 8), (badge_x + 3, badge_y + 8),
-                       (badge_x, badge_y + 13)]
-            pygame.draw.polygon(self.screen, (200, 160, 0), tri_pts)
+            # Memory pin: outer brass disc + inner pearl + tiny vertical drop —
+            # reads as a small inlaid brass pin holding the card "remembered."
+            pin_x = x + CARD_WIDTH - 14
+            pin_y = y + 12 + lift_y
+            pygame.draw.circle(self.screen, th.brass_900, (pin_x, pin_y), 8)
+            pygame.draw.circle(self.screen, th.brass_500, (pin_x, pin_y), 7)
+            pygame.draw.circle(self.screen, th.brass_300, (pin_x, pin_y), 5)
+            pygame.draw.circle(self.screen, th.brass_100,
+                               (pin_x - 1, pin_y - 1), 2)
+            # Small vertical drop below the pin head — the "stem".
+            pygame.draw.line(self.screen, th.brass_700,
+                             (pin_x, pin_y + 7), (pin_x, pin_y + 13), 2)
+            pygame.draw.circle(self.screen, th.brass_700, (pin_x, pin_y + 13), 1)
 
         received_highlight = False
         if player is not None and slot_index is not None and game_manager is not None:
@@ -523,14 +1013,15 @@ class Renderer:
                 self.screen.blit(back, (dx - i * 2, dy - i * 2))
             self._draw_shadow(dx, dy + 5)
             self.screen.blit(back, (dx, dy))
-            count_surf = self.small_font.render(str(remaining), True, TEXT_WHITE)
-            count_rect = count_surf.get_rect(center=(cx, cy + CARD_HEIGHT // 2 + 14))
-            self.screen.blit(count_surf, count_rect)
+            self._draw_stack_label(cx, cy + CARD_HEIGHT // 2 + 26,
+                                   "DECK", str(remaining))
         else:
             self.draw_empty_slot(dx, dy)
             empty_surf = self.small_font.render("Empty", True, DIM)
             empty_rect = empty_surf.get_rect(center=(cx, cy))
             self.screen.blit(empty_surf, empty_rect)
+            self._draw_stack_label(cx, cy + CARD_HEIGHT // 2 + 26,
+                                   "DECK", "0")
 
     def draw_discard(self, discard_pile):
         if not discard_pile:
@@ -541,9 +1032,8 @@ class Renderer:
         top_card = discard_pile[-1]
         top_card.face_up = True
         self.draw_card_face(dx, dy, top_card)
-        label_surf = self.small_font.render("Discard", True, TEXT_DIM)
-        label_rect = label_surf.get_rect(center=(cx, cy + CARD_HEIGHT // 2 + 14))
-        self.screen.blit(label_surf, label_rect)
+        self._draw_stack_label(cx, cy + CARD_HEIGHT // 2 + 26,
+                               "DISCARD", str(len(discard_pile)))
 
     def draw_player_area(self, player, position, is_current, is_human, game_manager, mouse_pos):
         px, py = position
@@ -564,30 +1054,35 @@ class Renderer:
         if layout == 'free':
             self._draw_area_outline(bounds)
 
-        name_color = GOLD if is_current else TEXT_WHITE
-        raw_name_y = card_positions[0][1] - CARD_HEIGHT // 2 - 80 if card_positions else py - 112
+        # Hand-area light pool — soft elliptical lamp glow under the player's
+        # cards. Anchors the cards to the felt and silently signals "this zone
+        # is yours." Skipped on high-contrast and non-atmospheric themes.
+        _th_active = theme_mod.active()
+        if (not getattr(_th_active, "high_contrast", False)
+                and getattr(_th_active, "is_atmospheric", True)):
+            self._draw_hand_pool(px, py)
+
+        # Brass-trimmed nameplate (replaces the old floating-text + dark pill).
+        # We anchor the plate to whichever side of the cards is "outside" — for
+        # the human (bottom seat) that's *above* the cards toward center; for
+        # opponents at the top it's also above. The plate must clear the cards
+        # by a comfortable gap (no overlap) and must clear the status bar.
         _, y_min, _, y_max = bounds
-        name_y = max(y_min + 32, min(raw_name_y, y_max - CARD_HEIGHT - 96))
-        name_surf = self.ui_font.render(player.name, True, name_color)
-        name_rect = name_surf.get_rect(center=(px, name_y))
-        if is_current:
-            alpha = int(80 + 40 * math.sin(self._pulse_time * 3))
-            glow_rect = name_rect.inflate(38, 19)
-            glow_surf = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-            pygame.draw.rect(glow_surf, (*GOLD, alpha), glow_surf.get_rect(), border_radius=8)
-            self.screen.blit(glow_surf, glow_rect.topleft)
-        pill_surf = pygame.Surface((name_rect.width + 32, name_rect.height + 16), pygame.SRCALPHA)
-        pygame.draw.rect(pill_surf, (*BG_DARK, 180), pill_surf.get_rect(), border_radius=8)
-        self.screen.blit(pill_surf, (name_rect.centerx - name_rect.width // 2 - 26, name_rect.centery - name_rect.height // 2 - 13))
-        self.screen.blit(name_surf, name_rect)
-        info_y = name_y + name_surf.get_height() + 6
-        if is_human:
-            info_text = f"Cards: {player.card_count}"
+        plate_h = 72
+        gap_above_cards = 26
+        if card_positions:
+            card_top = card_positions[0][1]
+            raw_plate_y = card_top - gap_above_cards - plate_h // 2
         else:
-            info_text = f"Cards: {player.card_count}"
-        info_surf = self.small_font.render(info_text, True, TEXT_DIM)
-        info_rect = info_surf.get_rect(center=(px, info_y))
-        self.screen.blit(info_surf, info_rect)
+            raw_plate_y = py - 80
+        # Lower clamp keeps the plate clear of the status bar; we deliberately
+        # let it sit *above* the player-area `y_min` if needed because the gap
+        # between status bar and player area is metadata real estate, not card
+        # real estate.
+        min_y = STATUS_BAR_H + 8 + plate_h // 2
+        max_y = y_max - CARD_HEIGHT - 110
+        plate_y = max(min_y, min(raw_plate_y, max_y))
+        self._draw_nameplate(px, plate_y, player, is_current, is_human)
 
         for slot_index in range(player.hand_size):
             card = player.hand[slot_index]
@@ -781,10 +1276,16 @@ class Renderer:
         cx, cy = DRAWN_CARD_POS
         dx = cx - CARD_WIDTH // 2
         dy = cy - CARD_HEIGHT // 2
-        label_surf = self.small_font.render("DREW", True, GOLD)
-        label_rect = label_surf.get_rect(center=(cx, dy - 12))
-        self.screen.blit(label_surf, label_rect)
-        rect = self.draw_card_face(dx, dy, card, show_power_label=True, show_pips=False)
+        # Gold ribbon banner above the drawn card. If the card has a power, the
+        # ribbon switches to that power's color and shows the power label so the
+        # player sees the strategic option without scanning text.
+        ribbon_text = "DREW"
+        ribbon_color = None
+        if card.power is not None:
+            ribbon_text = POWER_LABELS.get(card.power, ribbon_text).upper()
+            ribbon_color = POWER_COLORS.get(card.power)
+        self._draw_ribbon(cx, dy - 22, ribbon_text, accent_color=ribbon_color)
+        rect = self.draw_card_face(dx, dy, card, show_power_label=False, show_pips=False)
         return rect
 
     def draw_peek_reveal(self):
@@ -806,22 +1307,88 @@ class Renderer:
         pygame.draw.rect(border_surf, (*POWER_GLOW, border_alpha), border_surf.get_rect(), 3, border_radius=CORNER_RADIUS + 2)
         self.screen.blit(border_surf, (rx - 4, ry - 4))
 
-    def draw_game_log(self, log_entries):
+    # Lookup tables for type-coded log entries. The keyword test runs against
+    # the lower-cased log line; the first keyword to match wins. Order matters
+    # — declare/penalty come before pair/draw because "declared a pair" should
+    # read as a declare event, not a pair event.
+    _LOG_KIND_RULES = (
+        ("declare",   ("declar", "penalt", "won", "wins", "winner", "lost")),
+        ("power",     ("peek", "power", "skipp", "swap power")),
+        ("pair",      ("pair", "matched", "paired")),
+        ("system",    ("round ", "shuffl", "start", "deal")),
+        ("react",     ("dropped", "drop ", "reaction", "called")),
+        ("swap",      ("swap", "swapped")),
+        ("discard",   ("discard",)),
+        ("draw",      ("drew", "draw")),
+    )
+
+    def _classify_log_entry(self, text):
+        low = text.lower()
+        for kind, kws in self._LOG_KIND_RULES:
+            if any(kw in low for kw in kws):
+                return kind
+        return "default"
+
+    def _log_entry_style(self, kind):
+        """Returns (bullet_glyph, color) for a classified log kind."""
+        th = theme_mod.active()
+        return {
+            "declare":  ("⚡", th.signal_stop),   # ⚡
+            "power":    ("✦", th.peek_blue),     # ✦
+            "pair":     ("◆", th.signal_go),     # ◆
+            "system":   ("—", th.brass_500),     # —
+            "react":    ("◆", th.signal_warn),   # ◆ amber
+            "swap":     ("⇄", th.brass_300),     # ⇄
+            "discard":  ("◻", th.brass_300),     # ◻
+            "draw":     ("♠", th.brass_300),     # ♠
+        }.get(kind, ("◆", th.brass_500))
+
+    def draw_game_log(self, log_entries, round_number=None):
         th = theme_mod.active()
         panel_rect = pygame.Rect(LOG_PANEL_X, LOG_PANEL_Y, LOG_PANEL_W, LOG_PANEL_H)
 
+        # Outer brass panel — slightly more opaque than before so the felt
+        # doesn't bleed through and wash out the ledger paper inside.
         panel_surf = pygame.Surface((LOG_PANEL_W, LOG_PANEL_H), pygame.SRCALPHA)
         for i in range(LOG_PANEL_H):
             t = i / max(1, LOG_PANEL_H - 1)
-            r = int(th.brass_900[0] * (0.34 + 0.18 * (1 - t)))
-            g = int(th.brass_900[1] * (0.34 + 0.18 * (1 - t)))
-            b = int(th.brass_900[2] * (0.34 + 0.18 * (1 - t)))
-            pygame.draw.line(panel_surf, (r, g, b, 232), (0, i), (LOG_PANEL_W, i))
+            r = int(th.brass_900[0] * (0.40 + 0.22 * (1 - t)))
+            g = int(th.brass_900[1] * (0.40 + 0.22 * (1 - t)))
+            b = int(th.brass_900[2] * (0.40 + 0.22 * (1 - t)))
+            pygame.draw.line(panel_surf, (r, g, b, 245), (0, i), (LOG_PANEL_W, i))
         mask = pygame.Surface(panel_surf.get_size(), pygame.SRCALPHA)
         pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=10)
         panel_surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         self.screen.blit(panel_surf, (LOG_PANEL_X, LOG_PANEL_Y))
 
+        # Aged-paper inner panel — a warm dark tone behind the entries so log
+        # text reads as a ledger page rather than a translucent overlay.
+        header_font = typo.header_italic(LOG_HEADER_FONT_SIZE)
+        # We compute the header height up here so the paper inset can start
+        # below the brass-top header strip.
+        header_h_est = header_font.get_height()
+        paper_inset = 12
+        paper_top = LOG_PANEL_Y + header_h_est + 28 + 18  # header + sub line + sep
+        paper_rect = pygame.Rect(
+            LOG_PANEL_X + paper_inset, paper_top,
+            LOG_PANEL_W - paper_inset * 2, LOG_PANEL_Y + LOG_PANEL_H - paper_top - paper_inset,
+        )
+        paper = pygame.Surface(paper_rect.size, pygame.SRCALPHA)
+        # Paper tone: warm dark with a faint vertical gradient so it reads
+        # like aged ledger leaf — slightly lighter at the top, deeper at bottom.
+        for i in range(paper_rect.height):
+            t = i / max(1, paper_rect.height - 1)
+            r = int(40 + (52 - 40) * (1 - t))
+            g = int(32 + (42 - 32) * (1 - t))
+            b = int(18 + (26 - 18) * (1 - t))
+            pygame.draw.line(paper, (r, g, b, 230), (0, i), (paper_rect.width, i))
+        paper_mask = pygame.Surface(paper_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(paper_mask, (255, 255, 255, 255), paper_mask.get_rect(), border_radius=6)
+        paper.blit(paper_mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        self.screen.blit(paper, paper_rect.topleft)
+        pygame.draw.rect(self.screen, th.brass_900, paper_rect, 1, border_radius=6)
+
+        # Brass border lines on the outer panel.
         pygame.draw.line(self.screen, th.brass_300,
                          (LOG_PANEL_X + 12, LOG_PANEL_Y + 1),
                          (LOG_PANEL_X + LOG_PANEL_W - 12, LOG_PANEL_Y + 1), 1)
@@ -830,17 +1397,25 @@ class Renderer:
                          (LOG_PANEL_X + LOG_PANEL_W - 12, LOG_PANEL_Y + 2), 1)
         pygame.draw.rect(self.screen, th.brass_700, panel_rect, 2, border_radius=10)
 
-        header_font = typo.header_italic(34)
+        # Header — Playfair Italic for the deco "Game Log" title, plus a
+        # subtle Round X subline beneath in Inter so the player can orient.
         header_surf = header_font.render("Game Log", True, th.brass_300)
         header_pos = (LOG_PANEL_X + 22, LOG_PANEL_Y + 10)
         self.screen.blit(header_surf, header_pos)
+
+        if round_number is not None:
+            sub_font = typo.body(LOG_SUB_FONT_SIZE)
+            sub_surf = sub_font.render(f"ROUND {round_number}", True, th.text_dim)
+            sub_pos = (LOG_PANEL_X + 26, header_pos[1] + header_surf.get_height() + 2)
+            self.screen.blit(sub_surf, sub_pos)
 
         ornament = self.small_font.render("❖", True, th.brass_500)
         ornament_x = LOG_PANEL_X + LOG_PANEL_W - 22 - ornament.get_width()
         ornament_y = LOG_PANEL_Y + 10 + (header_surf.get_height() - ornament.get_height()) // 2
         self.screen.blit(ornament, (ornament_x, ornament_y))
 
-        sep_y = LOG_PANEL_Y + header_surf.get_height() + 18
+        # Header → content separator: thin dark, bright accent.
+        sep_y = paper_rect.top - 8
         pygame.draw.line(self.screen, th.brass_700,
                          (LOG_PANEL_X + 18, sep_y),
                          (LOG_PANEL_X + LOG_PANEL_W - 18, sep_y), 1)
@@ -848,40 +1423,63 @@ class Renderer:
                          (LOG_PANEL_X + 18, sep_y + 3),
                          (LOG_PANEL_X + LOG_PANEL_W - 18, sep_y + 3), 1)
 
-        content_top = sep_y + 14
+        content_top = paper_rect.top + 8
+        bullet_x = paper_rect.left + 14
+        stripe_x = paper_rect.left + 4
+        text_x = paper_rect.left + 38
+        line_h = 38
 
         if not log_entries:
             empty_font = typo.body_italic(22)
             empty = empty_font.render("Awaiting the first move...", True, th.text_muted)
-            er = empty.get_rect(midtop=(LOG_PANEL_X + LOG_PANEL_W // 2, content_top + 12))
+            er = empty.get_rect(midtop=(LOG_PANEL_X + LOG_PANEL_W // 2, content_top + 14))
             self.screen.blit(empty, er)
             return
 
-        visible = log_entries[-10:]
+        visible = log_entries[-8:]
         n = len(visible)
-        bullet_x = LOG_PANEL_X + 22
-        text_x = LOG_PANEL_X + 40
-        line_h = 34
-        max_text_w = LOG_PANEL_W - (text_x - LOG_PANEL_X) - 14
+        max_text_w = paper_rect.right - text_x - 12
 
         for i, entry in enumerate(visible):
             text = str(entry.get('text', entry)) if isinstance(entry, dict) else str(entry)
+            kind = self._classify_log_entry(text)
+            bullet_glyph, kind_color = self._log_entry_style(kind)
             if self.log_font.size(text)[0] > max_text_w:
                 while text and self.log_font.size(text + "…")[0] > max_text_w:
                     text = text[:-1]
                 text = text + "…"
 
             age = (n - 1 - i)
-            alpha = max(120, 255 - age * 13)
+            alpha = max(140, 255 - age * 13)
             y = content_top + i * line_h
 
-            bullet_surf = self.log_font.render("◆", True, th.brass_500)
+            # 3 px color stripe on the left margin matching the entry kind.
+            stripe = pygame.Surface((3, line_h - 6), pygame.SRCALPHA)
+            stripe.fill((*kind_color, alpha))
+            self.screen.blit(stripe, (stripe_x, y + 2))
+
+            bullet_surf = self.log_font.render(bullet_glyph, True, kind_color)
             bullet_surf.set_alpha(alpha)
             self.screen.blit(bullet_surf, (bullet_x, y))
 
             line_surf = self.log_font.render(text, True, th.text_white)
             line_surf.set_alpha(alpha)
             self.screen.blit(line_surf, (text_x, y))
+
+    _ACTION_TOOLTIPS = {
+        'declare':       "Declare your hand for victory",
+        'draw':          "Draw a card from the deck",
+        'swap':          "Trade the drawn card for one of yours",
+        'discard':       "Discard the drawn card",
+        'pair_own':      "Match the drawn card to one of yours",
+        'pair_opponent': "Match the drawn card to an opponent's",
+        'self_pair':     "Pair two of your own known cards",
+        'shuffle':       "Re-shuffle your face-down cards",
+        'play_power':    "Use this card's special power",
+        'drop_self':     "Match this rank from your hand",
+        'drop_opponent': "Force an opponent to play this rank",
+        'pass_reaction': "Skip this reaction window",
+    }
 
     def draw_action_buttons(self, action_buttons):
         th = theme_mod.active()
@@ -890,63 +1488,292 @@ class Renderer:
         pulse_keys = getattr(self, "_pulse_actions", set())
         keybind_hints = getattr(self, "_action_keybinds", {})
 
+        now_ms = pygame.time.get_ticks()
+        # Clear hover-start records for buttons no longer visible.
+        for stale in [k for k in self._action_hover_start if k not in action_buttons]:
+            del self._action_hover_start[stale]
+        # We collect tooltip jobs while iterating and draw them after the loop
+        # so the tooltip is never occluded by an adjacent button's plate.
+        tooltip_jobs = []
+
         for name, btn in action_buttons.items():
             rect = btn['rect']
             hovered = rect.collidepoint(pygame.mouse.get_pos())
             focused = (name == focus_key)
             dim = (name in dim_keys)
             pulse = (name in pulse_keys)
+            icon_kind = btn.get('icon')
             color = btn.get('hover_color', btn['color']) if (hovered or focused) else btn['color']
 
-            shadow_surf = pygame.Surface((rect.width + 6, rect.height + 8), pygame.SRCALPHA)
-            pygame.draw.rect(shadow_surf, (0, 0, 0, 90), (3, 5, rect.width, rect.height), border_radius=10)
-            self.screen.blit(shadow_surf, (rect.x - 3, rect.y))
+            # Hover lift: visually press the button "up" by 2 px, with the shadow
+            # staying in place so the eye reads it as physical depth.
+            lift = -2 if (hovered or focused) and not dim else 0
+            draw_rect = rect.move(0, lift)
 
+            # Drop shadow (anchored to the un-lifted rect so lift creates depth).
+            shadow_surf = pygame.Surface((rect.width + 8, rect.height + 12), pygame.SRCALPHA)
+            pygame.draw.rect(shadow_surf, (0, 0, 0, 110),
+                             (4, 6, rect.width, rect.height), border_radius=12)
+            self.screen.blit(shadow_surf, (rect.x - 4, rect.y))
+
+            # Body plate gradient. For disabled buttons we desaturate toward
+            # neutral brass so the dim state reads at a glance.
+            if dim:
+                lum = int(0.30 * color[0] + 0.59 * color[1] + 0.11 * color[2])
+                plate_col = (
+                    int(lum * 0.55 + th.brass_700[0] * 0.45),
+                    int(lum * 0.55 + th.brass_700[1] * 0.45),
+                    int(lum * 0.55 + th.brass_700[2] * 0.45),
+                )
+            else:
+                plate_col = color
             plate = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
             for i in range(rect.height):
                 t = i / max(1, rect.height - 1)
-                shade = 0.85 + 0.15 * (1 - abs(t - 0.4) * 2)
-                cc = (int(color[0] * shade), int(color[1] * shade), int(color[2] * shade), 255)
+                shade = 0.82 + 0.20 * (1 - abs(t - 0.35) * 2)
+                cc = (
+                    max(0, min(255, int(plate_col[0] * shade))),
+                    max(0, min(255, int(plate_col[1] * shade))),
+                    max(0, min(255, int(plate_col[2] * shade))),
+                    255,
+                )
                 pygame.draw.line(plate, cc, (0, i), (rect.width, i))
             mask = pygame.Surface(plate.get_size(), pygame.SRCALPHA)
-            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=10)
+            pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=12)
             plate.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
             if dim:
-                plate.set_alpha(140)
-            self.screen.blit(plate, rect)
+                plate.set_alpha(95)
+            self.screen.blit(plate, draw_rect)
 
-            pygame.draw.line(self.screen, th.brass_300, (rect.left + 4, rect.top + 2),
-                             (rect.right - 4, rect.top + 2), 1)
-            pygame.draw.rect(self.screen, th.brass_500, rect, 2, border_radius=10)
+            # Top highlight + outline.
+            pygame.draw.line(self.screen, th.brass_300,
+                             (draw_rect.left + 6, draw_rect.top + 2),
+                             (draw_rect.right - 6, draw_rect.top + 2), 1)
+            pygame.draw.rect(self.screen, th.brass_500, draw_rect, 2, border_radius=12)
 
+            # Icon glyph + label, centered within the full button width.
+            # The keyboard-shortcut chip is now drawn *below* the button, so
+            # the label gets the entire button width with no right-side reserve.
             label_color = th.text_white if not dim else th.text_dim
             text_surf = self.ui_font.render(btn['text'], True, label_color)
-            text_rect = text_surf.get_rect(center=rect.center)
+            icon_size = int(rect.height * 0.42)
+            icon_gap = 10 if icon_kind else 0
+            block_w = (icon_size if icon_kind else 0) + icon_gap + text_surf.get_width()
+            block_x = draw_rect.left + max(8, (rect.width - block_w) // 2)
+            block_y = draw_rect.centery
+            if icon_kind:
+                self._draw_button_icon(
+                    self.screen, block_x, block_y, icon_size, icon_kind, label_color,
+                )
+            text_rect = text_surf.get_rect(
+                midleft=(block_x + (icon_size + icon_gap if icon_kind else 0), block_y),
+            )
             self.screen.blit(text_surf, text_rect)
 
+            # Keyboard-shortcut chip — sits *under* the button, horizontally
+            # centered, so the label has full button width to breathe.
             kb = keybind_hints.get(name)
             if kb:
-                chip = self.small_font.render(kb.upper(), True, th.brass_900)
-                cw = chip.get_width() + 8
-                ch = chip.get_height() + 2
-                cx = rect.right - cw - 4
-                cy = rect.top + 4
-                chip_bg = pygame.Surface((cw, ch), pygame.SRCALPHA)
-                pygame.draw.rect(chip_bg, th.brass_300, chip_bg.get_rect(), border_radius=3)
+                chip_surf = self.small_font.render(kb.upper(), True, th.brass_900)
+                chip_w = chip_surf.get_width() + 12
+                chip_h = chip_surf.get_height() + 4
+                cx = draw_rect.centerx - chip_w // 2
+                cy = draw_rect.bottom + 6
+                chip_bg = pygame.Surface((chip_w, chip_h), pygame.SRCALPHA)
+                pygame.draw.rect(chip_bg, th.brass_300, chip_bg.get_rect(),
+                                 border_radius=chip_h // 2)
+                pygame.draw.rect(chip_bg, th.brass_700, chip_bg.get_rect(),
+                                 1, border_radius=chip_h // 2)
                 self.screen.blit(chip_bg, (cx, cy))
-                self.screen.blit(chip, (cx + 4, cy + 1))
+                self.screen.blit(chip_surf, (cx + 6, cy + 2))
 
+            # Recommended-action shimmer (kept from existing code).
             if pulse:
                 t = pygame.time.get_ticks() / 1000.0
-                pulse_a = int(120 * (0.5 + 0.5 * math.sin(t * 5.0)))
-                glow = pygame.Surface((rect.width + 16, rect.height + 16), pygame.SRCALPHA)
+                pulse_a = int(140 * (0.5 + 0.5 * math.sin(t * 5.0)))
+                glow = pygame.Surface((rect.width + 18, rect.height + 18), pygame.SRCALPHA)
                 pygame.draw.rect(glow, (*th.brass_300, pulse_a),
-                                 glow.get_rect(), 4, border_radius=12)
-                self.screen.blit(glow, (rect.x - 8, rect.y - 8))
+                                 glow.get_rect(), 4, border_radius=14)
+                self.screen.blit(glow, (rect.x - 9, rect.y - 9 + lift))
 
             if focused:
                 pygame.draw.rect(self.screen, th.brass_300,
-                                 rect.inflate(6, 6), 2, border_radius=12)
+                                 draw_rect.inflate(6, 6), 2, border_radius=14)
+
+            # Track hover for tooltips. Tooltip appears 400 ms after the mouse
+            # first lands on the button and stays until the mouse leaves.
+            tip_text = self._ACTION_TOOLTIPS.get(name)
+            if hovered and not dim and tip_text:
+                start = self._action_hover_start.get(name)
+                if start is None:
+                    self._action_hover_start[name] = now_ms
+                elif now_ms - start >= 400:
+                    tooltip_jobs.append((draw_rect, tip_text))
+            else:
+                self._action_hover_start.pop(name, None)
+
+        for rect, text in tooltip_jobs:
+            self._draw_tooltip(rect, text)
+
+    def _draw_tooltip(self, anchor_rect, text):
+        """Brass-trimmed tooltip plate centered above the anchor rect."""
+        th = theme_mod.active()
+        font = typo.body(20)
+        text_surf = font.render(text, True, th.text_white)
+        pad_x = 14
+        pad_y = 8
+        tip_w = text_surf.get_width() + pad_x * 2
+        tip_h = text_surf.get_height() + pad_y * 2
+        tip_x = anchor_rect.centerx - tip_w // 2
+        tip_y = anchor_rect.top - tip_h - 10
+        # Keep within the screen.
+        tip_x = max(8, min(tip_x, SCREEN_WIDTH - tip_w - 8))
+
+        bg = pygame.Surface((tip_w, tip_h), pygame.SRCALPHA)
+        for i in range(tip_h):
+            t = i / max(1, tip_h - 1)
+            r = int(th.brass_900[0] * (0.38 + 0.20 * (1 - t)))
+            g = int(th.brass_900[1] * (0.38 + 0.20 * (1 - t)))
+            b = int(th.brass_900[2] * (0.38 + 0.20 * (1 - t)))
+            pygame.draw.line(bg, (r, g, b, 245), (0, i), (tip_w, i))
+        mask = pygame.Surface((tip_w, tip_h), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=6)
+        bg.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+        self.screen.blit(bg, (tip_x, tip_y))
+        pygame.draw.rect(self.screen, th.brass_500,
+                         pygame.Rect(tip_x, tip_y, tip_w, tip_h), 1, border_radius=6)
+        # Small downward triangle pointing at the button.
+        tri = [
+            (anchor_rect.centerx - 6, tip_y + tip_h - 1),
+            (anchor_rect.centerx + 6, tip_y + tip_h - 1),
+            (anchor_rect.centerx, tip_y + tip_h + 6),
+        ]
+        pygame.draw.polygon(self.screen, th.brass_500, tri)
+        pygame.draw.polygon(self.screen, th.brass_900, tri, 1)
+        self.screen.blit(text_surf, (tip_x + pad_x, tip_y + pad_y))
+
+    def _draw_button_icon(self, surface, x, y, size, kind, color):
+        """Procedural glyph drawn inside an action button. `(x, y)` is the
+        top-center anchor — the glyph is centered horizontally on x within `size`,
+        vertically on y."""
+        s = size
+        cx = x + s // 2
+        cy = y
+        col = color
+        thick = max(2, s // 10)
+
+        if kind == 'swap':
+            # Two crossed arrows — top arrow points right, bottom points left.
+            top_y = cy - s // 4
+            bot_y = cy + s // 4
+            pygame.draw.line(surface, col, (cx - s // 2, top_y),
+                             (cx + s // 2, top_y), thick)
+            pygame.draw.polygon(surface, col, [
+                (cx + s // 2, top_y),
+                (cx + s // 2 - s // 5, top_y - s // 6),
+                (cx + s // 2 - s // 5, top_y + s // 6),
+            ])
+            pygame.draw.line(surface, col, (cx - s // 2, bot_y),
+                             (cx + s // 2, bot_y), thick)
+            pygame.draw.polygon(surface, col, [
+                (cx - s // 2, bot_y),
+                (cx - s // 2 + s // 5, bot_y - s // 6),
+                (cx - s // 2 + s // 5, bot_y + s // 6),
+            ])
+        elif kind == 'discard':
+            # Card outline with a downward arrow inside it.
+            r = pygame.Rect(cx - s // 3, cy - s // 2, (s * 2) // 3, s)
+            pygame.draw.rect(surface, col, r, thick, border_radius=3)
+            pygame.draw.line(surface, col, (cx, cy - s // 4),
+                             (cx, cy + s // 4), thick)
+            pygame.draw.polygon(surface, col, [
+                (cx, cy + s // 3),
+                (cx - s // 6, cy + s // 8),
+                (cx + s // 6, cy + s // 8),
+            ])
+        elif kind == 'pair':
+            # Two overlapping card rectangles.
+            r1 = pygame.Rect(cx - s // 2, cy - s // 3, (s * 2) // 5, (s * 2) // 3)
+            r2 = pygame.Rect(cx - s // 12, cy - s // 2, (s * 2) // 5, (s * 2) // 3)
+            pygame.draw.rect(surface, col, r1, thick, border_radius=3)
+            pygame.draw.rect(surface, col, r2, thick, border_radius=3)
+        elif kind == 'declare':
+            # Small crown silhouette: 3-peak shape.
+            base_y = cy + s // 3
+            top_y = cy - s // 3
+            pts = [
+                (cx - s // 2, base_y),
+                (cx - s // 2, cy - s // 6),
+                (cx - s // 4, top_y + s // 6),
+                (cx - s // 8, cy - s // 6),
+                (cx, top_y),
+                (cx + s // 8, cy - s // 6),
+                (cx + s // 4, top_y + s // 6),
+                (cx + s // 2, cy - s // 6),
+                (cx + s // 2, base_y),
+            ]
+            pygame.draw.polygon(surface, col, pts, thick)
+            # Crown band dots.
+            for px in (cx - s // 4, cx, cx + s // 4):
+                pygame.draw.circle(surface, col, (px, base_y - thick), max(1, thick - 1))
+        elif kind == 'draw':
+            # Card stack with up-arrow above (drawing one off the deck).
+            r = pygame.Rect(cx - s // 3, cy - s // 8, (s * 2) // 3, s // 2)
+            pygame.draw.rect(surface, col, r, thick, border_radius=3)
+            pygame.draw.rect(surface, col,
+                             pygame.Rect(cx - s // 3 + 4, cy - s // 8 - 4,
+                                         (s * 2) // 3, s // 2),
+                             thick, border_radius=3)
+            pygame.draw.line(surface, col,
+                             (cx, cy - s // 2), (cx, cy - s // 6), thick)
+            pygame.draw.polygon(surface, col, [
+                (cx, cy - s // 2),
+                (cx - s // 6, cy - s // 3),
+                (cx + s // 6, cy - s // 3),
+            ])
+        elif kind == 'shuffle':
+            # Two looping arrows — one curving over the other.
+            pygame.draw.arc(surface, col,
+                            pygame.Rect(cx - s // 2, cy - s // 2, s, s),
+                            0.4, 2.6, thick)
+            pygame.draw.arc(surface, col,
+                            pygame.Rect(cx - s // 2, cy - s // 2 + 2, s, s),
+                            3.5, 5.7, thick)
+            # Arrowheads.
+            pygame.draw.polygon(surface, col, [
+                (cx + s // 2 - 2, cy + s // 8),
+                (cx + s // 3, cy - s // 12),
+                (cx + s // 3, cy + s // 4),
+            ])
+            pygame.draw.polygon(surface, col, [
+                (cx - s // 2 + 2, cy - s // 8),
+                (cx - s // 3, cy - s // 4),
+                (cx - s // 3, cy + s // 12),
+            ])
+        elif kind == 'drop':
+            # Card with a down arrow + check, signaling 'react and drop'.
+            r = pygame.Rect(cx - s // 3, cy - s // 2, (s * 2) // 3, s)
+            pygame.draw.rect(surface, col, r, thick, border_radius=3)
+            pygame.draw.line(surface, col,
+                             (cx - s // 8, cy), (cx, cy + s // 6), thick)
+            pygame.draw.line(surface, col,
+                             (cx, cy + s // 6), (cx + s // 4, cy - s // 5), thick)
+        elif kind == 'pass':
+            # An X to signal "no thanks".
+            pygame.draw.line(surface, col,
+                             (cx - s // 3, cy - s // 3), (cx + s // 3, cy + s // 3), thick)
+            pygame.draw.line(surface, col,
+                             (cx - s // 3, cy + s // 3), (cx + s // 3, cy - s // 3), thick)
+        elif kind == 'power':
+            # Lightning bolt — generic power glyph.
+            pygame.draw.polygon(surface, col, [
+                (cx - s // 6, cy - s // 2),
+                (cx + s // 4, cy - s // 8),
+                (cx, cy - s // 12),
+                (cx + s // 6, cy + s // 2),
+                (cx - s // 4, cy + s // 8),
+                (cx, cy + s // 12),
+            ])
 
     def _draw_cancel_button(self, cancel_button, mouse_pos):
         rect = cancel_button['rect']

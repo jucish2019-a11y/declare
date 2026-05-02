@@ -35,6 +35,7 @@ class GameSettings:
     motion_scale: float = 1.0
     particles_enabled: bool = True
     captions: bool = False
+    atmospheric_lighting: bool = True
 
     def effective_anim_duration(self, base_duration: float) -> float:
         if not self.animations_enabled:
@@ -51,3 +52,4 @@ class GameSettings:
         self.hint_tier = settings_bag.hint_tier
         self.coach_mode = settings_bag.coach_mode
         self.streamer_mode = settings_bag.streamer_mode
+        self.atmospheric_lighting = getattr(settings_bag, 'atmospheric_lighting', True)

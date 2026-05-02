@@ -116,9 +116,11 @@ class EdgeFlash:
 
 class Vignette:
     """Subtle radial darkening at the edges of the screen.
-    Drawn always; intensity bumps during declare-mode for theatrical push-in."""
+    Drawn always; intensity bumps during declare-mode for theatrical push-in.
+    Tinted toward warm-black instead of pure black so the parlor warmth carries to the rim."""
     def __init__(self):
-        self.intensity = 0.45
+        self.intensity = 0.62
+        self.tint = (8, 5, 2)
         self._cached = None
         self._cached_intensity = None
 
@@ -127,11 +129,12 @@ class Vignette:
         cx, cy = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
         max_d = math.hypot(cx, cy)
         steps = 30
+        tr, tg, tb = self.tint
         for i in range(steps):
             t = i / (steps - 1)
             r = int(max_d * (1.0 - t * 0.4))
             a = int(255 * intensity * (t ** 2.2))
-            pygame.draw.circle(surf, (0, 0, 0, a), (cx, cy), r)
+            pygame.draw.circle(surf, (tr, tg, tb, a), (cx, cy), r)
         return surf
 
     def get(self, intensity=None):
@@ -143,34 +146,55 @@ class Vignette:
 
 
 class LampGlow:
-    """Slow moving warm-light ray across the felt for atmosphere.
-    Very subtle - meant to add ambience, not obscure gameplay."""
+    """A pendant-lamp flare effect that blooms on demand (declare moments, etc.).
+
+    The static lamp pool is baked into the felt itself; this class only adds a
+    transient theatrical flare. It's stationary — pendant lamps don't drift —
+    and intensity ramps up then decays over `duration`."""
     def __init__(self):
-        self.t = 0.0
-        self.speed = 1.0 / 60.0
-        self._cached = None
+        self.life = 0.0
+        self.max_life = 0.0
+        self.amp = 0.0
+        # Pendant hangs slightly above geometric center (matches felt cache).
+        self.center_x = SCREEN_WIDTH // 2
+        self.center_y = SCREEN_HEIGHT // 2 - 20
 
     def update(self, dt):
-        self.t = (self.t + dt * self.speed) % 1.0
+        if self.life > 0:
+            self.life -= dt
+            if self.life < 0:
+                self.life = 0.0
+
+    def flare(self, amp=1.0, duration=0.4):
+        """One-shot flare: lamp brightens then settles. Used for declare moments."""
+        ms = theme.active().motion_scale
+        if ms <= 0.05:
+            return
+        self.amp = max(self.amp, amp * ms)
+        self.life = duration * ms
+        self.max_life = self.life
 
     def draw(self, screen):
+        if self.life <= 0 or self.amp <= 0:
+            return
         if not theme.active().particles_enabled:
             return
         if theme.active().motion_scale <= 0.1:
             return
+        # Ease-in-out: bright at start, decays to zero.
+        t = self.life / max(0.0001, self.max_life)
+        intensity = (t ** 0.5) * self.amp  # quick rise, slow fall
         col = theme.active().lamp_glow
-        center_x = int(SCREEN_WIDTH * (0.25 + 0.5 * self.t))
-        center_y = SCREEN_HEIGHT // 2
-        radius = 220
+        radius = 360
         glow = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-        for i in range(12, 0, -1):
-            t = i / 12
-            r = int(radius * t)
-            a = int(6 * (1.0 - t))
+        for i in range(20, 0, -1):
+            tt = i / 20
+            r = int(radius * tt)
+            a = int(28 * intensity * (1.0 - tt) ** 1.4)
             if a <= 0:
                 continue
             pygame.draw.circle(glow, (*col, a), (radius, radius), r)
-        screen.blit(glow, (center_x - radius, center_y - radius))
+        screen.blit(glow, (self.center_x - radius, self.center_y - radius))
 
 
 class DealAnimation:

@@ -95,6 +95,18 @@ class ParticleSystem:
             sx, sy = int(p.x), int(p.y)
             pygame.draw.line(screen, color, (sx - size, sy), (sx + size, sy), 1)
             pygame.draw.line(screen, color, (sx, sy - size), (sx, sy + size), 1)
+        elif p.kind == "mote":
+            # Soft parlor dust mote: low-alpha core + softer outer halo for the
+            # lamp-light catching effect. Doesn't shrink with age — fades via alpha.
+            base_a = max(0, alpha // 4)
+            if base_a <= 0:
+                return
+            sz = max(1, int(p.size * 2 + 2))
+            mote = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
+            pygame.draw.circle(mote, (*p.color, base_a), (sz, sz), sz)
+            pygame.draw.circle(mote, (*p.color, min(255, base_a * 3)),
+                               (sz, sz), max(1, int(p.size)))
+            screen.blit(mote, (int(p.x - sz), int(p.y - sz)))
         else:
             size = max(1, int(p.size * (1.0 - 0.7 * p.t)))
             pygame.draw.circle(screen, color, (int(p.x), int(p.y)), size)
@@ -224,3 +236,33 @@ class ParticleSystem:
                 kind="dot",
                 drag=0.99,
             ))
+
+    def ambient_parlor_motes(self, cx, cy, rx, ry, color=(255, 215, 130)):
+        """Slow warm dust motes drifting up through the lamp pool — a quieter,
+        more period-appropriate ambient than the bottom-rising ambient_dust.
+
+        Spawns inside the lit oval, motes drift upward at 8-14 px/s with a faint
+        horizontal sway induced by the per-particle drag-asymmetric vx. Cap is
+        ~10 visible at any time."""
+        live = sum(1 for p in self.particles if p.kind == "mote")
+        if live >= 12:
+            return
+        if random.random() >= 0.06:
+            return
+        # Bias spawn to inside the bright pool: pick a random angle and a
+        # squared-rolled radius so most motes spawn near center.
+        angle = random.uniform(0, math.tau)
+        r_t = random.random() ** 1.6
+        sx = cx + math.cos(angle) * rx * 0.55 * r_t
+        sy = cy + math.sin(angle) * ry * 0.55 * r_t + random.uniform(-20, 80)
+        self.particles.append(Particle(
+            sx, sy,
+            random.uniform(-3, 3),
+            random.uniform(-14, -8),
+            life=random.uniform(3.5, 5.5),
+            color=color,
+            size=random.uniform(0.9, 1.6),
+            ay=random.uniform(-1.0, 1.0),
+            kind="mote",
+            drag=0.995,
+        ))

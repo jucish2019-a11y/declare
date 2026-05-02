@@ -420,83 +420,7 @@ def paint_face(card, w=CARD_WIDTH, h=CARD_HEIGHT):
     return surf
 
 
-def paint_back(style="classic", w=CARD_WIDTH, h=CARD_HEIGHT):
-    th = theme.active()
-    cache_key = (style, w, h, th.name, th.high_contrast,
-                 tuple(th.card_back_a), tuple(th.card_back_b))
-    if cache_key in _BACK_CACHE:
-        return _BACK_CACHE[cache_key]
-
-    surf = pygame.Surface((w, h), pygame.SRCALPHA)
-    a, b, motif = _back_palette(style, th)
-
-    grad = pygame.Surface((w, h), pygame.SRCALPHA)
-    for i in range(h):
-        t = i / max(1, h - 1)
-        r = int(a[0] + (b[0] - a[0]) * t)
-        g = int(a[1] + (b[1] - a[1]) * t)
-        bl = int(a[2] + (b[2] - a[2]) * t)
-        pygame.draw.line(grad, (r, g, bl, 255), (0, i), (w, i))
-    mask = pygame.Surface((w, h), pygame.SRCALPHA)
-    pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=CORNER_RADIUS)
-    grad.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
-    surf.blit(grad, (0, 0))
-
-    inner = pygame.Rect(5, 5, w - 10, h - 10)
-    pygame.draw.rect(surf, (*motif[:3], 60), inner, 2, border_radius=CORNER_RADIUS - 2)
-    inner2 = pygame.Rect(8, 8, w - 16, h - 16)
-    pygame.draw.rect(surf, (*motif[:3], 30), inner2, 1, border_radius=CORNER_RADIUS - 4)
-
-    overlay = pygame.Surface((w, h), pygame.SRCALPHA)
-    spacing = 12
-    for x in range(-h, w + h, spacing):
-        pygame.draw.line(overlay, (*motif[:3], 22), (x, 0), (x + h, h), 1)
-        pygame.draw.line(overlay, (*motif[:3], 22), (x, h), (x + h, 0), 1)
-    overlay.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
-    surf.blit(overlay, (0, 0))
-
-    cx, cy = w // 2, h // 2
-    medallion_w = int(w * 0.55)
-    medallion_h = int(h * 0.4)
-    medallion = pygame.Rect(cx - medallion_w // 2, cy - medallion_h // 2,
-                            medallion_w, medallion_h)
-    pygame.draw.ellipse(surf, (*motif[:3], 90), medallion)
-    pygame.draw.ellipse(surf, motif, medallion, 2)
-
-    if style == "deco_emerald":
-        for i in range(4):
-            t = i / 3
-            inner_e = pygame.Rect(
-                medallion.x + int(medallion.width * 0.1 * t),
-                medallion.y + int(medallion.height * 0.1 * t),
-                medallion.width - int(medallion.width * 0.2 * t),
-                medallion.height - int(medallion.height * 0.2 * t),
-            )
-            pygame.draw.ellipse(surf, (*motif[:3], 60), inner_e, 1)
-    elif style == "deco_obsidian":
-        sun_r = min(medallion_w, medallion_h) // 4
-        pygame.draw.circle(surf, motif, (cx, cy), sun_r, 2)
-        for k in range(8):
-            angle = math.pi * 2 * k / 8
-            x1 = cx + int(math.cos(angle) * sun_r)
-            y1 = cy + int(math.sin(angle) * sun_r)
-            x2 = cx + int(math.cos(angle) * (sun_r + 12))
-            y2 = cy + int(math.sin(angle) * (sun_r + 12))
-            pygame.draw.line(surf, motif, (x1, y1), (x2, y2), 2)
-    elif style == "deco_brass":
-        diamond_pts = [(cx, cy - 14), (cx + 8, cy), (cx, cy + 14), (cx - 8, cy)]
-        pygame.draw.polygon(surf, motif, diamond_pts)
-        pygame.draw.polygon(surf, (*motif[:3], 90), diamond_pts, 1)
-    else:
-        d_pts = [(cx, cy - 10), (cx + 6, cy), (cx, cy + 10), (cx - 6, cy)]
-        pygame.draw.polygon(surf, motif, d_pts)
-
-    pygame.draw.rect(surf, (*motif[:3], 200), surf.get_rect(), 1, border_radius=CORNER_RADIUS)
-    pygame.draw.line(surf, (255, 255, 255, 60), (4, 3), (w - 5, 3), 1)
-    pygame.draw.line(surf, (255, 255, 255, 30), (3, 4), (3, h - 5), 1)
-
-    _BACK_CACHE[cache_key] = surf
-    return surf
+BRASS_MOTIF = (240, 200, 110)
 
 
 def _back_palette(style, th):
@@ -507,6 +431,269 @@ def _back_palette(style, th):
     if style == "deco_brass":
         return ((40, 30, 18), (90, 65, 30), (240, 200, 110))
     return (th.card_back_a, th.card_back_b, th.card_back_motif)
+
+
+def _vertical_gradient(w, h, a, b):
+    grad = pygame.Surface((w, h), pygame.SRCALPHA)
+    for y in range(h):
+        t = y / max(1, h - 1)
+        r = int(a[0] + (b[0] - a[0]) * t)
+        g = int(a[1] + (b[1] - a[1]) * t)
+        bl = int(a[2] + (b[2] - a[2]) * t)
+        pygame.draw.line(grad, (r, g, bl, 255), (0, y), (w, y))
+    return grad
+
+
+def _radial_gradient(w, h, center_color, edge_color):
+    grad = pygame.Surface((w, h), pygame.SRCALPHA)
+    grad.fill((*edge_color, 255))
+    cx, cy = w / 2, h / 2
+    max_r = int(math.hypot(cx, cy)) + 2
+    for r in range(max_r, 0, -1):
+        t = r / max_r
+        rr = int(center_color[0] + (edge_color[0] - center_color[0]) * t)
+        gg = int(center_color[1] + (edge_color[1] - center_color[1]) * t)
+        bb = int(center_color[2] + (edge_color[2] - center_color[2]) * t)
+        pygame.draw.circle(grad, (rr, gg, bb, 255), (int(cx), int(cy)), r)
+    return grad
+
+
+def _octagon_points(rect, chamfer):
+    x, y, ww, hh = rect.x, rect.y, rect.width, rect.height
+    c = min(chamfer, ww // 2, hh // 2)
+    return [
+        (x + c, y), (x + ww - c, y),
+        (x + ww, y + c), (x + ww, y + hh - c),
+        (x + ww - c, y + hh), (x + c, y + hh),
+        (x, y + hh - c), (x, y + c),
+    ]
+
+
+def _draw_classic(surf, w, h, motif, mask):
+    """Theme-driven: cross-hatch + oval medallion + 4-point diamond."""
+    overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+    spacing = 12
+    for x in range(-h, w + h, spacing):
+        pygame.draw.line(overlay, (*motif[:3], 22), (x, 0), (x + h, h), 1)
+        pygame.draw.line(overlay, (*motif[:3], 22), (x, h), (x + h, 0), 1)
+    overlay.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    surf.blit(overlay, (0, 0))
+
+    cx, cy = w // 2, h // 2
+    med_w, med_h = int(w * 0.55), int(h * 0.4)
+    medallion = pygame.Rect(cx - med_w // 2, cy - med_h // 2, med_w, med_h)
+    pygame.draw.ellipse(surf, (*motif[:3], 90), medallion)
+    pygame.draw.ellipse(surf, motif, medallion, 2)
+
+    d = max(6, int(min(w, h) * 0.05))
+    pygame.draw.polygon(surf, motif, [
+        (cx, cy - d * 1.2), (cx + d * 0.8, cy),
+        (cx, cy + d * 1.2), (cx - d * 0.8, cy),
+    ])
+
+
+def _draw_brass(surf, w, h, motif, mask):
+    """Sunburst + octagonal medallion + diamond+bars + corner ornaments."""
+    overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+    apex = (w // 2, h // 8)
+    rays = 19
+    spread = math.pi * 1.05
+    base_y = h + 10
+    for i in range(rays):
+        t = (i / (rays - 1) - 0.5) * spread
+        ex = apex[0] + math.tan(t) * (base_y - apex[1])
+        pygame.draw.line(overlay, (*BRASS_MOTIF, 14), apex, (int(ex), base_y), 1)
+    overlay.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    surf.blit(overlay, (0, 0))
+
+    cx, cy = w // 2, h // 2
+    med_w, med_h = int(w * 0.62), int(h * 0.46)
+    med_rect = pygame.Rect(cx - med_w // 2, cy - med_h // 2, med_w, med_h)
+    chamfer = max(8, min(med_w, med_h) // 5)
+    outer_pts = _octagon_points(med_rect, chamfer)
+    pygame.draw.polygon(surf, (*motif[:3], 100), outer_pts)
+    pygame.draw.polygon(surf, motif, outer_pts, 2)
+
+    inset = max(6, min(med_w, med_h) // 10)
+    inner_rect = pygame.Rect(med_rect.x + inset, med_rect.y + inset,
+                             med_w - inset * 2, med_h - inset * 2)
+    inner_pts = _octagon_points(inner_rect, max(4, chamfer - inset))
+    pygame.draw.polygon(surf, (*motif[:3], 80), inner_pts, 1)
+
+    dh = max(10, int(h * 0.09))
+    dw = max(6, int(w * 0.045))
+    pygame.draw.polygon(surf, motif, [
+        (cx, cy - dh), (cx + dw, cy), (cx, cy + dh), (cx - dw, cy),
+    ])
+    bar_off = dw + max(6, int(w * 0.04))
+    bar_h = int(dh * 1.4)
+    pygame.draw.rect(surf, motif, (cx - bar_off - 1, cy - bar_h // 2, 2, bar_h))
+    pygame.draw.rect(surf, motif, (cx + bar_off - 1, cy - bar_h // 2, 2, bar_h))
+
+    pad = max(6, int(min(w, h) * 0.05))
+    pip_r = max(2, int(min(w, h) * 0.018))
+    arm = max(6, int(min(w, h) * 0.06))
+    corners = [
+        (pad, pad, 1, 1),
+        (w - pad, pad, -1, 1),
+        (pad, h - pad, 1, -1),
+        (w - pad, h - pad, -1, -1),
+    ]
+    for cxp, cyp, sx, sy in corners:
+        pygame.draw.circle(surf, motif, (cxp, cyp), pip_r)
+        pygame.draw.line(surf, motif, (cxp, cyp + sy * pip_r * 2),
+                         (cxp, cyp + sy * (pip_r * 2 + arm)), 1)
+        pygame.draw.line(surf, motif, (cxp + sx * pip_r * 2, cyp),
+                         (cxp + sx * (pip_r * 2 + arm), cyp), 1)
+
+
+def _draw_emerald(surf, w, h, motif, mask):
+    """Diamond lattice + concentric ovals + facet lines + sparkle + corner pips."""
+    overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+    cell = max(10, w // 12)
+    half = cell // 2
+    rows = h // half + 2
+    cols = w // cell + 2
+    for r in range(rows):
+        for c in range(cols):
+            ox = c * cell + (half if r % 2 else 0)
+            oy = r * half
+            pygame.draw.polygon(overlay, (*motif[:3], 18), [
+                (ox, oy - half), (ox + half, oy),
+                (ox, oy + half), (ox - half, oy),
+            ], 1)
+    overlay.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    surf.blit(overlay, (0, 0))
+
+    cx, cy = w // 2, h // 2
+    med_w, med_h = int(w * 0.6), int(h * 0.45)
+    medallion = pygame.Rect(cx - med_w // 2, cy - med_h // 2, med_w, med_h)
+    pygame.draw.ellipse(surf, (*motif[:3], 90), medallion)
+    pygame.draw.ellipse(surf, motif, medallion, 2)
+    for i in range(1, 5):
+        inset_w = int(med_w * 0.08 * i)
+        inset_h = int(med_h * 0.08 * i)
+        rect = pygame.Rect(medallion.x + inset_w, medallion.y + inset_h,
+                           med_w - inset_w * 2, med_h - inset_h * 2)
+        pygame.draw.ellipse(surf, (*motif[:3], 110), rect, 1)
+
+    facet_r = min(med_w, med_h) // 2
+    for k in range(8):
+        angle = math.pi * 2 * k / 8 + math.pi / 8
+        x2 = cx + int(math.cos(angle) * facet_r * 0.95)
+        y2 = cy + int(math.sin(angle) * facet_r * 0.7)
+        pygame.draw.line(surf, (*motif[:3], 110), (cx, cy), (x2, y2), 1)
+
+    sx, sy = cx + max(2, w // 80), cy - max(2, h // 80)
+    pygame.draw.circle(surf, (255, 255, 255, 230), (sx, sy), 2)
+
+    pip_off = max(8, int(min(w, h) * 0.06))
+    pip_d = max(3, int(min(w, h) * 0.025))
+    for cxp, cyp in [(pip_off, pip_off), (w - pip_off, pip_off),
+                     (pip_off, h - pip_off), (w - pip_off, h - pip_off)]:
+        pygame.draw.polygon(surf, motif, [
+            (cxp, cyp - pip_d), (cxp + pip_d, cyp),
+            (cxp, cyp + pip_d), (cxp - pip_d, cyp),
+        ])
+
+
+def _draw_obsidian(surf, w, h, motif, mask):
+    """Honeycomb + starfield + 16-ray rosette + concentric rings + pearl + corner pips."""
+    overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+    hex_r = max(6, w // 14)
+    hex_w = math.sqrt(3) * hex_r
+    hex_h = 1.5 * hex_r
+    rows = int(h / hex_h) + 2
+    cols = int(w / hex_w) + 2
+    for r in range(rows):
+        for c in range(cols):
+            cxh = c * hex_w + (hex_w / 2 if r % 2 else 0)
+            cyh = r * hex_h
+            pts = [(cxh + math.cos(math.pi / 6 + math.pi / 3 * k) * hex_r,
+                    cyh + math.sin(math.pi / 6 + math.pi / 3 * k) * hex_r)
+                   for k in range(6)]
+            pygame.draw.polygon(overlay, (*motif[:3], 16), pts, 1)
+
+    rng = random.Random((w << 16) ^ (h << 4) ^ 0xB175)
+    n_stars = max(8, (w * h) // 600)
+    for _ in range(n_stars):
+        sx = rng.randint(0, w - 1)
+        sy = rng.randint(0, h - 1)
+        a = rng.randint(40, 120)
+        pygame.draw.circle(overlay, (255, 255, 255, a), (sx, sy), 1)
+
+    overlay.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    surf.blit(overlay, (0, 0))
+
+    cx, cy = w // 2, h // 2
+    med_w, med_h = int(w * 0.6), int(h * 0.45)
+    medallion = pygame.Rect(cx - med_w // 2, cy - med_h // 2, med_w, med_h)
+    pygame.draw.ellipse(surf, motif, medallion, 2)
+
+    base_r = min(med_w, med_h) // 4
+    for k in range(16):
+        angle = math.pi * 2 * k / 16
+        x1 = cx + math.cos(angle) * base_r
+        y1 = cy + math.sin(angle) * base_r
+        x2 = cx + math.cos(angle) * base_r * 1.9
+        y2 = cy + math.sin(angle) * base_r * 1.9
+        width = 2 if k % 2 == 0 else 1
+        pygame.draw.line(surf, motif, (int(x1), int(y1)), (int(x2), int(y2)), width)
+
+    pygame.draw.circle(surf, (*motif[:3], 160), (cx, cy), int(base_r * 0.65), 1)
+    pygame.draw.circle(surf, motif, (cx, cy), max(2, int(base_r * 0.30)))
+
+    pearl_x = cx - max(2, w // 90)
+    pearl_y = cy - max(2, h // 90)
+    pygame.draw.circle(surf, (255, 255, 255, 230), (pearl_x, pearl_y), 2)
+
+    pad = max(7, int(min(w, h) * 0.05))
+    ring_r = max(3, int(min(w, h) * 0.022))
+    for cxp, cyp in [(pad, pad), (w - pad, pad), (pad, h - pad), (w - pad, h - pad)]:
+        pygame.draw.circle(surf, motif, (cxp, cyp), ring_r, 1)
+        pygame.draw.circle(surf, motif, (cxp, cyp), max(1, ring_r // 2))
+
+
+def paint_back(style="classic", w=CARD_WIDTH, h=CARD_HEIGHT):
+    th = theme.active()
+    a, b, motif = _back_palette(style, th)
+    cache_key = (style, w, h, th.name, th.high_contrast, tuple(a), tuple(b))
+    if cache_key in _BACK_CACHE:
+        return _BACK_CACHE[cache_key]
+
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    mask = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=CORNER_RADIUS)
+
+    if style == "deco_obsidian":
+        grad = _radial_gradient(w, h, (40, 40, 50), (18, 18, 22))
+    else:
+        grad = _vertical_gradient(w, h, a, b)
+    grad.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    surf.blit(grad, (0, 0))
+
+    if style == "deco_brass":
+        _draw_brass(surf, w, h, motif, mask)
+    elif style == "deco_emerald":
+        _draw_emerald(surf, w, h, motif, mask)
+    elif style == "deco_obsidian":
+        _draw_obsidian(surf, w, h, motif, mask)
+    else:
+        _draw_classic(surf, w, h, motif, mask)
+
+    inner1 = pygame.Rect(4, 4, w - 8, h - 8)
+    pygame.draw.rect(surf, (*motif[:3], 80), inner1, 2, border_radius=max(2, CORNER_RADIUS - 4))
+    inner2 = pygame.Rect(8, 8, w - 16, h - 16)
+    pygame.draw.rect(surf, (*motif[:3], 40), inner2, 1, border_radius=max(2, CORNER_RADIUS - 8))
+
+    pygame.draw.rect(surf, (*BRASS_MOTIF, 220), surf.get_rect(), 1, border_radius=CORNER_RADIUS)
+    pygame.draw.line(surf, (255, 255, 255, 70), (4, 3), (w - 5, 3), 1)
+    pygame.draw.line(surf, (255, 255, 255, 35), (3, 4), (3, h - 5), 1)
+
+    surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+
+    _BACK_CACHE[cache_key] = surf
+    return surf
 
 
 def paint_back_glow(style="classic", w=CARD_WIDTH, h=CARD_HEIGHT, t=0.0):

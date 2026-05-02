@@ -105,6 +105,7 @@ class SettingsBag:
     text_scale: float = 1.0
     motion_scale: float = 1.0
     particles_enabled: bool = True
+    atmospheric_lighting: bool = True
     music_volume: float = 0.5
     sfx_volume: float = 0.7
     voice_volume: float = 0.6
@@ -135,6 +136,7 @@ class Profile:
     tutorial_complete: bool = False
     last_match_config: dict = field(default_factory=dict)
     unlocked_card_backs: list = field(default_factory=lambda: ["classic"])
+    unlocked_themes: list = field(default_factory=lambda: ["default"])
     stats: Stats = field(default_factory=Stats)
     achievements: dict = field(default_factory=dict)
     settings: SettingsBag = field(default_factory=SettingsBag)
@@ -174,6 +176,7 @@ def _from_dict(data: dict) -> Profile:
     prof.tutorial_complete = data.get("tutorial_complete", False)
     prof.last_match_config = data.get("last_match_config", {})
     prof.unlocked_card_backs = data.get("unlocked_card_backs", ["classic"])
+    prof.unlocked_themes = data.get("unlocked_themes", ["default"])
 
     stats_data = data.get("stats", {})
     prof.stats = Stats(
@@ -203,6 +206,7 @@ def _from_dict(data: dict) -> Profile:
         text_scale=settings_data.get("text_scale", 1.0),
         motion_scale=settings_data.get("motion_scale", 1.0),
         particles_enabled=settings_data.get("particles_enabled", True),
+        atmospheric_lighting=settings_data.get("atmospheric_lighting", True),
         music_volume=settings_data.get("music_volume", 0.5),
         sfx_volume=settings_data.get("sfx_volume", 0.7),
         voice_volume=settings_data.get("voice_volume", 0.6),
@@ -236,6 +240,7 @@ def save(prof: Profile):
         "tutorial_complete": prof.tutorial_complete,
         "last_match_config": prof.last_match_config,
         "unlocked_card_backs": prof.unlocked_card_backs,
+        "unlocked_themes": prof.unlocked_themes,
         "stats": asdict(prof.stats),
         "settings": asdict(prof.settings),
         "achievements": prof.achievements,
@@ -370,3 +375,29 @@ def record_game_result(prof: Profile, meta: dict):
         s.final_scores_log.append(meta["final_score_human"])
         if len(s.final_scores_log) > 100:
             s.final_scores_log = s.final_scores_log[-100:]
+
+
+def check_theme_unlocks(prof: Profile) -> list:
+    """Returns a list of newly-unlocked theme keys based on current stats.
+
+    The unlocks are appended to prof.unlocked_themes in place. Caller is
+    responsible for surfacing toast/notification UI for the newly unlocked items.
+    """
+    try:
+        from theme import THEME_UNLOCK_CONDITIONS
+    except ImportError:
+        return []
+    s = prof.stats
+    newly = []
+    for theme_key, cond in THEME_UNLOCK_CONDITIONS.items():
+        if theme_key in prof.unlocked_themes:
+            continue
+        # Each condition has exactly one stat threshold (games_played /
+        # games_won / declares_won) plus a label. Pick the first stat key.
+        stat_key = next((k for k in cond if k != "label"), None)
+        if stat_key is None:
+            continue
+        if getattr(s, stat_key, 0) >= cond[stat_key]:
+            prof.unlocked_themes.append(theme_key)
+            newly.append(theme_key)
+    return newly

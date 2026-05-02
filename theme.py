@@ -12,9 +12,10 @@ class Theme:
     name: str = "Parlor"
 
     felt_deep: tuple = (26, 58, 46)
-    felt_mid: tuple = (44, 92, 69)
-    felt_rim: tuple = (14, 31, 24)
-    lamp_glow: tuple = (255, 220, 140)
+    felt_mid: tuple = (58, 118, 86)
+    felt_rim: tuple = (16, 38, 28)
+    felt_shadow: tuple = (8, 22, 16)
+    lamp_glow: tuple = (255, 215, 130)
 
     paper_warm: tuple = (244, 236, 216)
     paper_edge: tuple = (190, 178, 150)
@@ -61,6 +62,10 @@ class Theme:
     motion_scale: float = 1.0
     particles_enabled: bool = True
     high_contrast: bool = False
+    # When False, the renderer suppresses the lamp pool, vignette, dust motes,
+    # and other atmospheric flourishes — used by the Minimal theme to deliver
+    # a flat, modern, low-ornament look.
+    is_atmospheric: bool = True
 
     @property
     def gold(self):
@@ -120,6 +125,7 @@ THEME_HIGH_CONTRAST = replace(
     felt_deep=(0, 0, 0),
     felt_mid=(20, 20, 20),
     felt_rim=(0, 0, 0),
+    felt_shadow=(0, 0, 0),
     lamp_glow=(255, 255, 255),
     paper_warm=(255, 255, 255),
     paper_edge=(0, 0, 0),
@@ -137,8 +143,76 @@ THEME_HIGH_CONTRAST = replace(
     high_contrast=True,
 )
 
+THEME_SALOON = replace(
+    THEME_DEFAULT,
+    name="Saloon",
+    felt_deep=(38, 70, 48),
+    felt_mid=(54, 100, 70),
+    felt_rim=(12, 24, 18),
+    felt_shadow=(4, 12, 8),
+    lamp_glow=(255, 195, 110),
+    paper_warm=(238, 224, 196),
+    paper_edge=(176, 160, 130),
+    card_back_a=(52, 18, 22),
+    card_back_b=(90, 35, 38),
+    card_back_motif=(200, 155, 75),
+    brass_100=(245, 218, 152),
+    brass_300=(216, 178, 100),
+    brass_500=(172, 130, 58),
+    brass_700=(108, 80, 32),
+    brass_900=(52, 38, 16),
+)
+
+THEME_VEGAS = replace(
+    THEME_DEFAULT,
+    name="Vegas Premium",
+    felt_deep=(10, 70, 48),
+    felt_mid=(28, 130, 92),
+    felt_rim=(4, 32, 22),
+    felt_shadow=(0, 14, 10),
+    lamp_glow=(245, 240, 230),
+    paper_warm=(252, 250, 246),
+    paper_edge=(212, 210, 205),
+    card_back_a=(12, 25, 70),
+    card_back_b=(45, 80, 175),
+    card_back_motif=(220, 220, 220),
+    brass_100=(245, 245, 240),
+    brass_300=(215, 215, 220),
+    brass_500=(175, 175, 180),
+    brass_700=(110, 110, 120),
+    brass_900=(50, 50, 60),
+    declare_red=(235, 60, 60),
+    declare_red_hi=(255, 90, 90),
+    swap_green=(60, 180, 90),
+    swap_green_hi=(90, 220, 120),
+)
+
+THEME_MINIMAL = replace(
+    THEME_DEFAULT,
+    name="Minimal",
+    felt_deep=(32, 60, 70),
+    felt_mid=(32, 60, 70),
+    felt_rim=(20, 40, 48),
+    felt_shadow=(12, 24, 28),
+    lamp_glow=(200, 210, 220),
+    paper_warm=(248, 248, 248),
+    paper_edge=(210, 210, 210),
+    card_back_a=(28, 60, 80),
+    card_back_b=(50, 90, 120),
+    card_back_motif=(180, 195, 200),
+    brass_100=(240, 240, 240),
+    brass_300=(210, 210, 215),
+    brass_500=(170, 170, 175),
+    brass_700=(110, 110, 115),
+    brass_900=(50, 50, 55),
+    is_atmospheric=False,
+)
+
 THEMES = {
     "default": THEME_DEFAULT,
+    "saloon": THEME_SALOON,
+    "vegas": THEME_VEGAS,
+    "minimal": THEME_MINIMAL,
     "deutan": THEME_DEUTAN,
     "protan": THEME_PROTAN,
     "tritan": THEME_TRITAN,
@@ -147,10 +221,24 @@ THEMES = {
 
 THEME_LABELS = {
     "default": "Parlor",
+    "saloon": "Saloon",
+    "vegas": "Vegas Premium",
+    "minimal": "Minimal",
     "deutan": "CB - Deutan",
     "protan": "CB - Protan",
     "tritan": "CB - Tritan",
     "high_contrast": "High Contrast",
+}
+
+# Themes that must be unlocked through play. The colorblind/HC accessibility
+# themes are always available regardless of unlock state.
+UNLOCKABLE_THEMES = ("saloon", "vegas", "minimal")
+ALWAYS_UNLOCKED = ("default", "deutan", "protan", "tritan", "high_contrast")
+
+THEME_UNLOCK_CONDITIONS = {
+    "saloon":  {"games_played": 10, "label": "Play 10 games"},
+    "vegas":   {"games_won": 25,    "label": "Win 25 games"},
+    "minimal": {"declares_won": 5,  "label": "Win 5 declares"},
 }
 
 
@@ -197,9 +285,9 @@ def apply_felt_style(felt_key: str):
     try:
         from config import FELT_COLORS, FELT_COLORS_LIGHT
         deep = FELT_COLORS.get(felt_key, FELT_COLORS['forest'])
-        mid = tuple(int(v * 1.15) for v in deep)
-        mid = tuple(min(255, v) for v in mid)
-        rim = tuple(int(v * 0.35) for v in deep)
-        _active = replace(_active, felt_deep=deep, felt_mid=mid, felt_rim=rim)
+        mid = tuple(min(255, int(v * 1.45)) for v in deep)
+        rim = tuple(int(v * 0.45) for v in deep)
+        shadow = tuple(int(v * 0.20) for v in deep)
+        _active = replace(_active, felt_deep=deep, felt_mid=mid, felt_rim=rim, felt_shadow=shadow)
     except Exception:
         pass

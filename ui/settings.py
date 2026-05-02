@@ -37,11 +37,11 @@ class SettingsMenu:
 
     @property
     def PANEL_W(self):
-        return min(980, SCREEN_WIDTH - 32)
+        return min(1568, SCREEN_WIDTH - 64)
 
     @property
     def PANEL_H(self):
-        return min(680, SCREEN_HEIGHT - 32)
+        return min(1088, SCREEN_HEIGHT - 64)
 
     @property
     def PANEL_X(self):
@@ -69,15 +69,15 @@ class SettingsMenu:
 
     @property
     def TAB_W(self):
-        return min(165, self.PANEL_W // len(self.TABS))
+        return min(264, self.PANEL_W // len(self.TABS))
 
     @property
     def TAB_H(self):
-        return int(44 * get_mobile_scale())
+        return int(70 * get_mobile_scale())
 
     @property
     def TAB_BAR_Y(self):
-        return 84
+        return 134
 
     TABS = [
         ("display",        "Display"),
@@ -94,10 +94,10 @@ class SettingsMenu:
         scale = get_mobile_scale()
         self.font = typo.body(int(UI_FONT_SIZE * scale))
         self.small_font = typo.body(int(SMALL_FONT_SIZE * scale))
-        self.tab_font = typo.body_bold(int((UI_FONT_SIZE - 1) * scale))
-        self.title_font = typo.display_bold(int(32 * scale))
-        self.section_font = typo.body_bold(int(14 * scale))
-        self.label_font = typo.body(int(16 * scale))
+        self.tab_font = typo.body_bold(int((UI_FONT_SIZE + 4) * scale))
+        self.title_font = typo.display_bold(int(56 * scale))
+        self.section_font = typo.body_bold(int(22 * scale))
+        self.label_font = typo.body(int(26 * scale))
 
         self._hit = []
         self._tab_rects = {}
@@ -211,6 +211,16 @@ class SettingsMenu:
             if prof:
                 prof.settings.particles_enabled = payload
                 theme_mod.apply_particles(payload)
+        elif action == "atmospheric_lighting":
+            gs.atmospheric_lighting = payload
+            if prof:
+                prof.settings.atmospheric_lighting = payload
+            # Invalidate the felt cache so the lamp pool is rebuilt with the
+            # new flag honored.
+            try:
+                from ui.renderer import Renderer  # noqa: F401
+            except Exception:
+                pass
         elif action == "captions":
             gs.captions = payload
             if prof:
@@ -493,6 +503,12 @@ class SettingsMenu:
         y = self._row(lx, y, "Known Marker", [(True, "ON"), (False, "OFF")],
                       gs.show_known_marker, "marker", rx)
 
+        y += 8
+        y = self._section(lx, y, "Atmosphere")
+        y = self._row(lx, y, "Lamp & Vignette", [(True, "ON"), (False, "OFF")],
+                      getattr(gs, 'atmospheric_lighting', True),
+                      "atmospheric_lighting", rx)
+
     def _draw_gameplay(self, lx, y, rx, gs):
         y = self._section(lx, y, "Hand")
         y = self._row(lx, y, "Cards Per Hand",
@@ -565,11 +581,37 @@ class SettingsMenu:
             return
 
         y = self._section(lx, y, "Theme")
-        y = self._row(lx, y, "Theme",
-                      [("default", "Parlor"), ("deutan", "CB Deutan"),
-                       ("protan", "CB Protan"), ("tritan", "CB Tritan"),
-                       ("high_contrast", "High Contrast")],
+        # Build the theme list: always-available (Parlor + CB modes + HC) plus
+        # any unlockables the player has earned. Locked themes are not shown
+        # here; they appear with their unlock condition in the Profile screen.
+        from theme import (THEME_LABELS, ALWAYS_UNLOCKED, UNLOCKABLE_THEMES,
+                           THEME_UNLOCK_CONDITIONS)
+        unlocked = list(getattr(prof, 'unlocked_themes', ['default']))
+        theme_options = []
+        # Parlor first.
+        theme_options.append(("default", THEME_LABELS["default"]))
+        # Unlockables that the player has earned, in the canonical order.
+        for k in UNLOCKABLE_THEMES:
+            if k in unlocked:
+                theme_options.append((k, THEME_LABELS.get(k, k)))
+        # Accessibility themes always available.
+        for k in ("deutan", "protan", "tritan", "high_contrast"):
+            theme_options.append((k, THEME_LABELS.get(k, k)))
+        y = self._row(lx, y, "Theme", theme_options,
                       prof.settings.theme, "theme", rx)
+        # Show what's locked + how to unlock, so the player has a clear path.
+        locked = [k for k in UNLOCKABLE_THEMES if k not in unlocked]
+        if locked:
+            from config import TEXT_DIM
+            for k in locked:
+                cond = THEME_UNLOCK_CONDITIONS.get(k, {})
+                hint = self.small_font.render(
+                    f"{THEME_LABELS.get(k, k)} — locked: {cond.get('label', '')}",
+                    True, TEXT_DIM,
+                )
+                self.screen.blit(hint, (lx, y))
+                y += hint.get_height() + 2
+            y += 6
         y = self._row(lx, y, "Text Scale",
                       [(0.8, "80%"), (1.0, "100%"), (1.25, "125%"), (1.5, "150%")],
                       prof.settings.text_scale, "text_scale", rx)

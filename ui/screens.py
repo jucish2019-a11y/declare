@@ -391,6 +391,18 @@ class Button:
                 (cx - s // 3, cy + s // 2),
             ]
             pygame.draw.polygon(surface, color, pts)
+        elif kind == 'online':
+            # Globe: circle with two crossing arcs.
+            r = s // 2 - 2
+            pygame.draw.circle(surface, color, (cx, cy), r, thick)
+            pygame.draw.arc(surface, color,
+                            pygame.Rect(cx - r, cy - r // 2, r * 2, r),
+                            0, math.pi, thick)
+            pygame.draw.arc(surface, color,
+                            pygame.Rect(cx - r, cy - r // 2, r * 2, r),
+                            math.pi, 2 * math.pi, thick)
+            pygame.draw.line(surface, color, (cx, cy - r), (cx, cy + r), thick)
+            pygame.draw.line(surface, color, (cx - r, cy), (cx + r, cy), thick)
         elif kind == 'tutorial':
             # Open-book glyph: two trapezoids meeting at a spine.
             book_w = s // 2
@@ -502,17 +514,19 @@ class MenuScreen:
         base_y = int(SCREEN_HEIGHT * 0.65)
         SETTINGS_OLIVE = (110, 95, 50)
         SETTINGS_OLIVE_HOVER = (140, 122, 68)
-        # Simplified menu: 3 primary actions only.
+        # Simplified menu: 4 primary actions.
         # Help combines Tutorial + How To Play.
-        # Settings and Profile are accessed in-game via the menu button.
+        # Settings and Profile are accessed in-game via the hamburger menu button.
         self.play_button = Button(cx, base_y, bw, int(bh * 1.15), "Play",
                                    SWAP_GREEN, SWAP_GREEN_HOVER, icon='play')
-        self.help_button = Button(cx, base_y + int(bh * 1.15) + bsp * 2, bw, h48,
-                                   PEEK_BLUE, PEEK_BLUE_HOVER, icon='tutorial')
-        self.quit_button = Button(cx, base_y + int(bh * 1.15) + h48 + bsp * 4, bw, h44,
+        self.online_button = Button(cx, base_y + int(bh * 1.15) + bsp * 2, bw, h48,
+                                     PEEK_BLUE, PEEK_BLUE_HOVER, icon='online')
+        self.help_button = Button(cx, base_y + int(bh * 1.15) + h48 + bsp * 4, bw, h44,
+                                   PAIR_TEAL, PAIR_TEAL_HOVER, icon='tutorial')
+        self.quit_button = Button(cx, base_y + int(bh * 1.15) + h48 + h44 + bsp * 6, bw, h44,
                                    DECLARE_RED, DECLARE_RED_HOVER, icon='quit')
         self.new_game_button = self.play_button
-        self.buttons = [self.play_button, self.help_button, self.quit_button]
+        self.buttons = [self.play_button, self.online_button, self.help_button, self.quit_button]
         self._t = 0.0
 
     def _draw_card_back_medallion(self, surface, cx, cy, scale=1.0):
@@ -751,6 +765,8 @@ class MenuScreen:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.play_button.is_clicked(event.pos):
                 return 'new_game'
+            if self.online_button.is_clicked(event.pos):
+                return 'online'
             if self.help_button.is_clicked(event.pos):
                 return 'help'
             if self.quit_button.is_clicked(event.pos):
@@ -758,6 +774,8 @@ class MenuScreen:
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                 return 'new_game'
+            if event.key == pygame.K_o:
+                return 'online'
             if event.key == pygame.K_h:
                 return 'help'
             if event.key == pygame.K_q:

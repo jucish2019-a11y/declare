@@ -48,6 +48,15 @@ class Card:
     def __repr__(self):
         return f"Card({self.rank}, {self.suit})"
 
+    def to_dict(self) -> dict:
+        return {"r": self.rank, "s": self.suit, "u": self.face_up}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Card":
+        c = cls(data["r"], data["s"])
+        c.face_up = bool(data.get("u", False))
+        return c
+
 
 class Deck:
     def __init__(self, seed=None):

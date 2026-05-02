@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass, field, asdict
 
 
@@ -138,6 +139,7 @@ class Profile:
     last_match_config: dict = field(default_factory=dict)
     unlocked_card_backs: list = field(default_factory=lambda: ["classic"])
     unlocked_themes: list = field(default_factory=lambda: ["default"])
+    client_id: str = ""
     stats: Stats = field(default_factory=Stats)
     achievements: dict = field(default_factory=dict)
     settings: SettingsBag = field(default_factory=SettingsBag)
@@ -147,26 +149,33 @@ class Profile:
             self.achievements.setdefault(key, asdict(Achievement(key=key, title=title, description=desc)))
 
 
+def _ensure_client_id(prof: Profile) -> Profile:
+    if not prof.client_id:
+        prof.client_id = uuid.uuid4().hex
+        save(prof)
+    return prof
+
+
 def load() -> Profile:
     if _using_js_storage():
         data = _load_js_storage()
         if data is not None:
-            return _from_dict(data)
+            return _ensure_client_id(_from_dict(data))
         prof = Profile(created_at=time.time(), last_played_at=time.time())
-        return prof
+        return _ensure_client_id(prof)
     path = _profile_path()
     if not os.path.exists(path):
         prof = Profile(created_at=time.time(), last_played_at=time.time())
         save(prof)
-        return prof
+        return _ensure_client_id(prof)
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError):
         prof = Profile(created_at=time.time(), last_played_at=time.time())
-        return prof
+        return _ensure_client_id(prof)
 
-    return _from_dict(data)
+    return _ensure_client_id(_from_dict(data))
 
 
 def _from_dict(data: dict) -> Profile:
@@ -178,6 +187,7 @@ def _from_dict(data: dict) -> Profile:
     prof.last_match_config = data.get("last_match_config", {})
     prof.unlocked_card_backs = data.get("unlocked_card_backs", ["classic"])
     prof.unlocked_themes = data.get("unlocked_themes", ["default"])
+    prof.client_id = data.get("client_id", "")
 
     stats_data = data.get("stats", {})
     prof.stats = Stats(
@@ -243,6 +253,7 @@ def save(prof: Profile):
         "last_match_config": prof.last_match_config,
         "unlocked_card_backs": prof.unlocked_card_backs,
         "unlocked_themes": prof.unlocked_themes,
+        "client_id": prof.client_id,
         "stats": asdict(prof.stats),
         "settings": asdict(prof.settings),
         "achievements": prof.achievements,

@@ -55,8 +55,10 @@ class ToastManager:
     def _ensure_fonts(self):
         if self._font is None:
             import typography as typo
-            self._font = typo.body_bold(18)
-            self._small_font = typo.body(14)
+            from config import get_mobile_scale
+            m = get_mobile_scale()
+            self._font = typo.body_bold(int(18 * m))
+            self._small_font = typo.body(int(14 * m))
 
     def push(self, text, kind="info", icon=None, life=2.4):
         toast = Toast(text=text, kind=kind, icon=icon, life=life)

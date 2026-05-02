@@ -330,13 +330,37 @@ class _ScaledDisplay:
         except Exception:
             pass
 
+    def _game_rect(self):
+        """Return the (x, y, w, h) of the actual game area within the window,
+        accounting for letterbox / pillarbox bars."""
+        win_w, win_h = self.window.get_size()
+        if win_w <= 0 or win_h <= 0:
+            return (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+        if (win_w, win_h) == (SCREEN_WIDTH, SCREEN_HEIGHT):
+            return (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+        target_ratio = SCREEN_WIDTH / SCREEN_HEIGHT
+        win_ratio = win_w / max(1, win_h)
+        if win_ratio > target_ratio:
+            new_h = win_h
+            new_w = int(win_h * target_ratio)
+        else:
+            new_w = win_w
+            new_h = int(win_w / target_ratio)
+        new_w = max(1, new_w)
+        new_h = max(1, new_h)
+        return ((win_w - new_w) // 2, (win_h - new_h) // 2, new_w, new_h)
+
     def to_logical(self, pos):
         win_w, win_h = self.window.get_size()
         if win_w <= 0 or win_h <= 0:
             return pos
+        gx, gy, gw, gh = self._game_rect()
+        # Clamp to game rect and map to logical coordinates
+        lx = max(0, min(pos[0] - gx, gw))
+        ly = max(0, min(pos[1] - gy, gh))
         return (
-            int(pos[0] * SCREEN_WIDTH / win_w),
-            int(pos[1] * SCREEN_HEIGHT / win_h),
+            int(lx * SCREEN_WIDTH / gw),
+            int(ly * SCREEN_HEIGHT / gh),
         )
 
     def toggle_fullscreen(self):
@@ -366,8 +390,12 @@ class _ScaledDisplay:
         if win_size == (SCREEN_WIDTH, SCREEN_HEIGHT):
             self.window.blit(source, (0, 0))
         else:
-            scaled = pygame.transform.smoothscale(source, win_size)
-            self.window.blit(scaled, (0, 0))
+            # Letterbox / pillarbox to preserve 16:9 aspect ratio
+            gx, gy, gw, gh = self._game_rect()
+            scaled = pygame.transform.smoothscale(source, (gw, gh))
+            # Clear window to black first to fill the letterbox bars
+            self.window.fill((0, 0, 0))
+            self.window.blit(scaled, (gx, gy))
         pygame.display.flip()
 
 
@@ -377,11 +405,11 @@ def _translate_mouse_event(event, display):
         attrs = dict(event.__dict__)
         attrs['pos'] = new_pos
         if event.type == pygame.MOUSEMOTION and 'rel' in attrs:
-            win_w, win_h = display.window.get_size()
-            if win_w > 0 and win_h > 0:
+            _, _, gw, gh = display._game_rect()
+            if gw > 0 and gh > 0:
                 attrs['rel'] = (
-                    int(attrs['rel'][0] * SCREEN_WIDTH / win_w),
-                    int(attrs['rel'][1] * SCREEN_HEIGHT / win_h),
+                    int(attrs['rel'][0] * SCREEN_WIDTH / gw),
+                    int(attrs['rel'][1] * SCREEN_HEIGHT / gh),
                 )
         return pygame.event.Event(event.type, attrs)
     # Convert finger events to synthetic mouse events for touch support

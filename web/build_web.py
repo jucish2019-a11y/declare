@@ -20,7 +20,7 @@ def main():
             sys.executable, "-m", "pygbag",
             "--build", "--title", "Declare",
             "--ume_block", "0",
-            "--width", "1600", "--height", "900",
+            "--width", "2560", "--height", "1440",
             "--template", "web/declare.tmpl",
             "."
         ])

@@ -181,7 +181,7 @@ function show_infobox() {
     <title>{{cookiecutter.title}}</title>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes"/>
 
@@ -189,59 +189,74 @@ function show_infobox() {
     <link rel="icon" type="image/png" href="favicon.png" sizes="16x16">
 
     <style>
+        :root {
+            --bg-deep: #0e1f18;
+            --bg-mid: #1a2e24;
+            --text-gold: #e8c36e;
+            --text-gold-dim: #8a9a82;
+            --text-muted: #5a6a52;
+            --border-muted: #3a4a32;
+            --border-accent: #2a4a3a;
+            --z-canvas: 1;
+            --z-status: 10;
+            --z-infobox: 100;
+            --z-overlay: 200;
+            --font-base: clamp(14px, 2.5vw, 16px);
+        }
+
         #status {
             display: inline-block;
             vertical-align: top;
-            margin-top: 20px;
-            margin-left: 30px;
+            margin-top: clamp(12px, 2vh, 20px);
+            margin-left: clamp(16px, 3vw, 30px);
             font-weight: bold;
             font-family: 'Inter', 'Segoe UI', sans-serif;
-            color: #e8c36e;
-            font-size: 16px;
+            color: var(--text-gold);
+            font-size: clamp(0.85rem, 2.5vw, 1rem);
             letter-spacing: 0.5px;
         }
 
         #progress {
-            height: 8px;
-            width: 280px;
+            height: clamp(6px, 1vh, 8px);
+            width: min(280px, 80vw);
             border-radius: 4px;
-            background-color: #1a2e24;
-            border: 1px solid #2a4a3a;
+            background-color: var(--bg-mid);
+            border: 1px solid var(--border-accent);
             overflow: hidden;
         }
 
         #progress::-webkit-progress-bar {
-            background-color: #1a2e24;
+            background-color: var(--bg-mid);
             border-radius: 4px;
         }
 
         #progress::-webkit-progress-value {
-            background-color: #e8c36e;
+            background-color: var(--text-gold);
             border-radius: 4px;
             transition: width 0.2s ease;
         }
 
         #progress::-moz-progress-bar {
-            background-color: #e8c36e;
+            background-color: var(--text-gold);
             border-radius: 4px;
         }
 
         #infobox {
             position: fixed;
-            background: #0e1f18;
-            color: #e8c36e;
+            background: var(--bg-deep);
+            color: var(--text-gold);
             font-weight: bold;
             font-family: 'Inter', 'Segoe UI', sans-serif;
-            padding: 16px 32px;
+            padding: clamp(12px, 2vh, 16px) clamp(20px, 4vw, 32px);
             border-radius: 8px;
-            border: 1px solid #2a4a3a;
+            border: 1px solid var(--border-accent);
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
-            z-index: 999999;
+            z-index: var(--z-infobox);
             letter-spacing: 0.5px;
         }
 
         #transfer {
-            background: #0e1f18;
+            background: var(--bg-deep);
         }
 
         div.emscripten { text-align: center; }
@@ -255,9 +270,8 @@ function show_infobox() {
             background-color: transparent;
             width: 100%;
             height: 100%;
-            z-index: 5;
-            image-rendering: crisp-edges;
-            image-rendering: -webkit-optimize-contrast;
+            z-index: var(--z-canvas);
+            image-rendering: auto;
             padding: 0;
             margin: 0 auto;
             position: absolute;
@@ -276,40 +290,44 @@ function show_infobox() {
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            background: #0e1f18;
-            color: #e8c36e;
+            background: var(--bg-deep);
+            color: var(--text-gold);
             font-family: 'Inter', 'Segoe UI', sans-serif;
             text-align: center;
             align-items: center;
             justify-content: center;
             flex-direction: column;
-            z-index: 999999;
+            z-index: var(--z-overlay);
+            padding: 1rem;
+            box-sizing: border-box;
         }
         #rotate-overlay .rotate-icon {
-            font-size: 64px;
-            margin-bottom: 20px;
+            font-size: clamp(3rem, 12vw, 4rem);
+            margin-bottom: 1rem;
             animation: rotate-phone 2s ease-in-out infinite;
         }
         #rotate-overlay .rotate-text {
-            font-size: 22px;
+            font-size: clamp(1.1rem, 4vw, 1.4rem);
             font-weight: bold;
-            margin-bottom: 12px;
-            padding: 0 24px;
+            margin-bottom: 0.6rem;
+            padding: 0 1rem;
         }
         #rotate-overlay .rotate-sub {
-            font-size: 15px;
-            color: #8a9a82;
-            margin-bottom: 32px;
-            padding: 0 32px;
+            font-size: clamp(0.85rem, 3vw, 1rem);
+            color: var(--text-gold-dim);
+            margin-bottom: 1.5rem;
+            padding: 0 1rem;
         }
         #rotate-overlay .rotate-continue {
             background: transparent;
-            color: #5a6a52;
-            border: 1px solid #3a4a32;
-            padding: 10px 24px;
+            color: var(--text-muted);
+            border: 1px solid var(--border-muted);
+            padding: 0.65rem 1.5rem;
             border-radius: 8px;
-            font-size: 14px;
+            font-size: clamp(0.8rem, 2.5vw, 0.95rem);
             cursor: pointer;
+            min-width: 44px;
+            min-height: 44px;
         }
         @keyframes rotate-phone {
             0%, 100% { transform: rotate(0deg); }
@@ -320,11 +338,12 @@ function show_infobox() {
             font-family: 'Inter', 'Segoe UI', sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #0e1f18;
+            background-color: var(--bg-deep);
             overflow: hidden;
             width: 100%;
             height: 100%;
             height: 100dvh;
+            font-size: var(--font-base);
         }
 
         .topright{
@@ -356,6 +375,16 @@ function show_infobox() {
            top: 150px;
            right: 10px;
            border: none;
+        }
+
+        @media (max-width: 600px) {
+            :root {
+                --font-base: clamp(12px, 3.5vw, 14px);
+            }
+            .framed {
+                top: 80px;
+                right: 4px;
+            }
         }
     </style>
 
@@ -431,10 +460,9 @@ height="{{cookiecutter.height}}px"
             <div id="info" class="trinfo"></div>
 
             <iframe id="iframe" class="framed" name="iframe"
-width="470px" height="90%"
+width="100%" height="90%"
 allowtransparency="true"
-style="z-index: 10;"
-style="background: #FFFFFF;"
+style="z-index: var(--z-status); background: #FFFFFF; max-width: min(470px, 85vw);"
 frameborder="1"
                 allowfullscreen="true"
                 webkitallowfullscreen="true"

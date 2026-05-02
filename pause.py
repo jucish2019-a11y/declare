@@ -6,6 +6,14 @@ from config import SCREEN_WIDTH, SCREEN_HEIGHT
 
 
 class PauseOverlay:
+    @property
+    def _panel_w(self):
+        return min(480, int(SCREEN_WIDTH * 0.19))
+
+    @property
+    def _panel_h(self):
+        return min(460, int(SCREEN_HEIGHT * 0.32))
+
     def __init__(self):
         self._title_font = None
         self._option_font = None
@@ -24,9 +32,11 @@ class PauseOverlay:
     def _ensure_fonts(self):
         if self._title_font is None:
             import typography as typo
-            self._title_font = typo.display_bold(42)
-            self._option_font = typo.body_bold(26)
-            self._small_font = typo.body(16)
+            from config import get_mobile_scale
+            m = get_mobile_scale()
+            self._title_font = typo.display_bold(int(42 * m))
+            self._option_font = typo.body_bold(int(26 * m))
+            self._small_font = typo.body(int(16 * m))
 
     def reset(self):
         self.selected = 0
@@ -43,7 +53,8 @@ class PauseOverlay:
         overlay.fill((0, 0, 0, int(160 * self._fade_t)))
         screen.blit(overlay, (0, 0))
 
-        panel_w, panel_h = 480, 460
+        panel_w = self._panel_w
+        panel_h = self._panel_h
         panel_x = SCREEN_WIDTH // 2 - panel_w // 2
         panel_y = SCREEN_HEIGHT // 2 - panel_h // 2
         slide_y = int((1.0 - self._fade_t) * 30)
@@ -57,17 +68,17 @@ class PauseOverlay:
         screen.blit(panel, (panel_x, panel_y))
 
         title_surf = self._title_font.render("PAUSED", True, t.brass_300)
-        title_rect = title_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_y + 60))
+        title_rect = title_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_y + int(panel_h * 0.13)))
         screen.blit(title_surf, title_rect)
 
-        rule_y = panel_y + 100
+        rule_y = panel_y + int(panel_h * 0.22)
         pygame.draw.line(
             screen, t.brass_700,
             (panel_x + 60, rule_y), (panel_x + panel_w - 60, rule_y), 1,
         )
 
-        start_y = panel_y + 140
-        spacing = 50
+        start_y = panel_y + int(panel_h * 0.30)
+        spacing = int(panel_h * 0.11)
         self._option_rects = []
         for i, (key, label) in enumerate(self.options):
             y = start_y + i * spacing
@@ -87,7 +98,7 @@ class PauseOverlay:
              "Esc - Resume    Up/Down - Navigate    Enter - Select",
             True, t.text_dim,
         )
-        screen.blit(hint_surf, hint_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_y + panel_h - 28)))
+        screen.blit(hint_surf, hint_surf.get_rect(center=(SCREEN_WIDTH // 2, panel_y + panel_h - int(panel_h * 0.06))))
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:

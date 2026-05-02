@@ -12,8 +12,13 @@ from config import SCREEN_WIDTH, SCREEN_HEIGHT
 
 
 class AccessibilityPanel:
-    PANEL_W = 720
-    PANEL_H = 600
+    @property
+    def PANEL_W(self):
+        return min(720, int(SCREEN_WIDTH * 0.28))
+
+    @property
+    def PANEL_H(self):
+        return min(600, int(SCREEN_HEIGHT * 0.42))
 
     def __init__(self):
         self.active = False
@@ -28,10 +33,12 @@ class AccessibilityPanel:
     def _ensure(self):
         if self._title_font is None:
             import typography as typo
-            self._title_font = typo.display_bold(32)
-            self._sec_font = typo.body_bold(16)
-            self._body_font = typo.body_bold(18)
-            self._small_font = typo.body(14)
+            from config import get_mobile_scale
+            m = get_mobile_scale()
+            self._title_font = typo.display_bold(int(32 * m))
+            self._sec_font = typo.body_bold(int(16 * m))
+            self._body_font = typo.body_bold(int(18 * m))
+            self._small_font = typo.body(int(14 * m))
 
     def open(self):
         self.active = True

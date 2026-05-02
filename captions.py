@@ -31,7 +31,9 @@ class CaptionStream:
             return
         if self._font is None:
             import typography as typo
-            self._font = typo.body_bold(18)
+            from config import get_mobile_scale
+            m = get_mobile_scale()
+            self._font = typo.body_bold(int(18 * m))
         th = theme.active()
         now = time.monotonic()
         x = 24

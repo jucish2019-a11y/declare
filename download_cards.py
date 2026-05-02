@@ -1,11 +1,16 @@
 """Fetch a free public-domain card-image pack to assets/cards/.
 
-Source: hayeah/playing-cards-assets on GitHub (public domain).
+Source: deckofcardsapi.com (free API, standard 226x314 PNGs).
 Each card is a PNG in the form '<rank>_of_<suit>.png'. We translate to our
 internal naming convention 'A_spade.png', '10_heart.png', 'K_club.png', etc.
 
 If the download fails (offline / firewall), card_render falls back to the
 procedural painter automatically - game still works.
+
+NOTE: The default deckofcardsapi images are 226x314 pixels. For crisp
+rendering on high-DPI / retina displays, consider replacing them with
+higher-resolution assets (e.g., 500x726px from an alternate source).
+Larger source images allow smoothscale to produce sharper results.
 
 Run:
     python download_cards.py

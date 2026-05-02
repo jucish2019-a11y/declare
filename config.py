@@ -21,7 +21,10 @@ def is_mobile():
 
 def get_mobile_scale():
     """Return a scaling factor for UI elements on mobile devices."""
-    return 1.15 if is_mobile() else 1.0
+    return 1.5 if is_mobile() else 1.0
+
+
+MIN_TOUCH_TARGET = 48  # logical pixels minimum for any interactive element
 AI_DELAY = 0.8
 PEEK_REVEAL_SECONDS = 2.5
 
@@ -84,19 +87,28 @@ PLAYER_LEFT = (416, 720)
 PLAYER_RIGHT = (2144, 720)
 
 PLAYER_AREA_2 = {
-    0: (32, 768, 2528, 1312),
-    1: (64, 128, 2496, 608),
+    0: (int(SCREEN_WIDTH * 0.013), int(SCREEN_HEIGHT * 0.533),
+        int(SCREEN_WIDTH * 0.987), int(SCREEN_HEIGHT * 0.911)),
+    1: (int(SCREEN_WIDTH * 0.025), int(SCREEN_HEIGHT * 0.089),
+        int(SCREEN_WIDTH * 0.975), int(SCREEN_HEIGHT * 0.422)),
 }
 PLAYER_AREA_3 = {
-    0: (32, 768, 2528, 1312),
-    1: (64, 128, 1248, 608),
-    2: (1312, 128, 2496, 608),
+    0: (int(SCREEN_WIDTH * 0.013), int(SCREEN_HEIGHT * 0.533),
+        int(SCREEN_WIDTH * 0.987), int(SCREEN_HEIGHT * 0.911)),
+    1: (int(SCREEN_WIDTH * 0.025), int(SCREEN_HEIGHT * 0.089),
+        int(SCREEN_WIDTH * 0.488), int(SCREEN_HEIGHT * 0.422)),
+    2: (int(SCREEN_WIDTH * 0.512), int(SCREEN_HEIGHT * 0.089),
+        int(SCREEN_WIDTH * 0.975), int(SCREEN_HEIGHT * 0.422)),
 }
 PLAYER_AREA_4 = {
-    0: (32, 768, 2528, 1312),
-    1: (64, 128, 2496, 608),
-    2: (32, 224, 768, 1312),
-    3: (1792, 224, 2528, 1312),
+    0: (int(SCREEN_WIDTH * 0.013), int(SCREEN_HEIGHT * 0.533),
+        int(SCREEN_WIDTH * 0.987), int(SCREEN_HEIGHT * 0.911)),
+    1: (int(SCREEN_WIDTH * 0.025), int(SCREEN_HEIGHT * 0.089),
+        int(SCREEN_WIDTH * 0.975), int(SCREEN_HEIGHT * 0.422)),
+    2: (int(SCREEN_WIDTH * 0.013), int(SCREEN_HEIGHT * 0.156),
+        int(SCREEN_WIDTH * 0.300), int(SCREEN_HEIGHT * 0.911)),
+    3: (int(SCREEN_WIDTH * 0.700), int(SCREEN_HEIGHT * 0.156),
+        int(SCREEN_WIDTH * 0.987), int(SCREEN_HEIGHT * 0.911)),
 }
 
 LOG_PANEL_X = 2080

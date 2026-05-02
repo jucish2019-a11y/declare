@@ -8,7 +8,7 @@ import pygame
 import theme
 import audio
 import profile as profile_mod
-from config import SCREEN_WIDTH, SCREEN_HEIGHT
+from config import SCREEN_WIDTH, SCREEN_HEIGHT, get_mobile_scale
 
 
 class ProfileScreen:
@@ -27,11 +27,13 @@ class ProfileScreen:
     def _ensure(self):
         if self._title_font is None:
             import typography as typo
-            self._title_font = typo.display_bold(38)
-            self._tab_font = typo.body_bold(22)
-            self._body_font = typo.body(18)
-            self._small_font = typo.body(14)
-            self._number_font = typo.header_bold(36)
+            from config import get_mobile_scale
+            m = get_mobile_scale()
+            self._title_font = typo.display_bold(int(38 * m))
+            self._tab_font = typo.body_bold(int(22 * m))
+            self._body_font = typo.body(int(18 * m))
+            self._small_font = typo.body(int(14 * m))
+            self._number_font = typo.header_bold(int(36 * m))
 
     def draw(self, prof):
         self._ensure()
@@ -51,13 +53,14 @@ class ProfileScreen:
 
         tabs = [("stats", "Stats"), ("achievements", "Achievements"),
                 ("backs", "Card Backs")]
-        tab_w = 220
+        tab_w = min(220, int(SCREEN_WIDTH * 0.086))
+        tab_h = int(44 * get_mobile_scale())
         tab_y = 110
         total_w = tab_w * len(tabs)
         start_x = (SCREEN_WIDTH - total_w) // 2
         self.tab_rects = {}
         for i, (key, label) in enumerate(tabs):
-            r = pygame.Rect(start_x + i * tab_w, tab_y, tab_w - 4, 44)
+            r = pygame.Rect(start_x + i * tab_w, tab_y, tab_w - 4, tab_h)
             self.tab_rects[key] = r
             active_tab = (key == self.tab)
             color = th.brass_500 if active_tab else (60, 60, 60)
@@ -74,7 +77,7 @@ class ProfileScreen:
         else:
             self._draw_backs(prof, th)
 
-        bw, bh = 180, 44
+        bw, bh = int(180 * get_mobile_scale()), int(44 * get_mobile_scale())
         self.back_rect = pygame.Rect(40, SCREEN_HEIGHT - bh - 30, bw, bh)
         pygame.draw.rect(self.screen, (60, 60, 60), self.back_rect, border_radius=8)
         pygame.draw.rect(self.screen, th.brass_500, self.back_rect, 2, border_radius=8)
@@ -97,9 +100,9 @@ class ProfileScreen:
             ("Reactive (right)", s.reactive_pairs_correct),
             ("Reactive (wrong)", s.reactive_pairs_wrong),
         ]
-        gx = SCREEN_WIDTH // 2 - 540
+        gx = SCREEN_WIDTH // 2 - min(540, int(SCREEN_WIDTH * 0.21))
         gy = 200
-        cw, ch = 260, 110
+        cw, ch = min(260, int(SCREEN_WIDTH * 0.10)), min(110, int(SCREEN_HEIGHT * 0.076))
         for i, (label, value) in enumerate(cards):
             col = i % 4
             row = i // 4
@@ -120,10 +123,10 @@ class ProfileScreen:
             self.screen.blit(tt, (gx, gy + 280))
 
     def _draw_achievements(self, prof, th):
-        gx = SCREEN_WIDTH // 2 - 540
+        gx = SCREEN_WIDTH // 2 - min(540, int(SCREEN_WIDTH * 0.21))
         gy = 200
         items = list(prof.achievements.values())
-        cw, ch = 350, 70
+        cw, ch = min(350, int(SCREEN_WIDTH * 0.14)), min(70, int(SCREEN_HEIGHT * 0.049))
         cols = 3
         for i, ach in enumerate(items):
             col = i % cols
@@ -159,7 +162,7 @@ class ProfileScreen:
             ("deco_emerald",  "Emerald",       "deco_emerald" in prof.unlocked_card_backs),
             ("deco_obsidian", "Obsidian",      "deco_obsidian" in prof.unlocked_card_backs),
         ]
-        gx = SCREEN_WIDTH // 2 - 540
+        gx = SCREEN_WIDTH // 2 - min(540, int(SCREEN_WIDTH * 0.21))
         gy = 200
         for i, (key, label, unlocked) in enumerate(styles):
             rx = gx + i * 280
@@ -248,9 +251,11 @@ class HowToPlayScreen:
     def _ensure(self):
         if self._title_font is None:
             import typography as typo
-            self._title_font = typo.display_bold(36)
-            self._head_font = typo.header_bold(22)
-            self._body_font = typo.body(18)
+            from config import get_mobile_scale
+            m = get_mobile_scale()
+            self._title_font = typo.display_bold(int(36 * m))
+            self._head_font = typo.header_bold(int(22 * m))
+            self._body_font = typo.body(int(18 * m))
 
     def draw(self):
         self._ensure()
@@ -268,21 +273,21 @@ class HowToPlayScreen:
         title = self._title_font.render("How To Play", True, th.brass_300)
         self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 70)))
 
-        col_w = 720
+        col_w = min(720, SCREEN_WIDTH - 80)
         col_x = SCREEN_WIDTH // 2 - col_w // 2
         y = 140 - self.scroll
         for heading, body in HOW_TO_SECTIONS:
             h_surf = self._head_font.render(heading, True, th.brass_300)
             self.screen.blit(h_surf, (col_x, y))
-            y += 32
+            y += int(32 * get_mobile_scale())
             for line in self._wrap(body, col_w):
                 if 0 < y < SCREEN_HEIGHT:
                     bs = self._body_font.render(line, True, th.text_white)
                     self.screen.blit(bs, (col_x, y))
-                y += 26
+                y += int(26 * get_mobile_scale())
             y += 14
 
-        bw, bh = 180, 44
+        bw, bh = int(180 * get_mobile_scale()), int(44 * get_mobile_scale())
         self.back_rect = pygame.Rect(40, SCREEN_HEIGHT - bh - 30, bw, bh)
         pygame.draw.rect(self.screen, (60, 60, 60), self.back_rect, border_radius=8)
         pygame.draw.rect(self.screen, th.brass_500, self.back_rect, 2, border_radius=8)

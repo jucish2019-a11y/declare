@@ -975,12 +975,14 @@ class Renderer:
         overlay.fill((0, 0, 0, 120))
         screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 800, 160
+        box_w = min(800, SCREEN_WIDTH - 80)
+        box_h = min(160, int(SCREEN_HEIGHT * 0.11))
         box_rect = pygame.Rect(SCREEN_WIDTH // 2 - box_w // 2, SCREEN_HEIGHT // 2 - box_h // 2, box_w, box_h)
         pygame.draw.rect(screen, (50, 10, 10), box_rect, border_radius=12)
         pygame.draw.rect(screen, (200, 50, 50), box_rect, 2, border_radius=12)
-        
-        font = typo.display_bold(30)
+
+        scale = get_mobile_scale()
+        font = typo.display_bold(int(30 * scale))
         text_surf = font.render(notification_text, True, (255, 80, 80))
         screen.blit(text_surf, (box_rect.centerx - text_surf.get_width() // 2, box_rect.centery - text_surf.get_height() // 2))
 

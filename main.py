@@ -1780,8 +1780,10 @@ def _finalize_game_stats(prof, gm, result, meta, game_start_time, toasts, partic
         return
     play_seconds = max(0.0, pygame.time.get_ticks() / 1000.0 - game_start_time)
     human = next((p for p in gm.players if p.is_human), None)
-    winner_idx = result.get("winner")
-    won = (human is not None and winner_idx == human.seat_index)
+    winner = result.get("winner")
+    winner_idx = winner.seat_index if winner is not None else None
+    won = (human is not None and winner_idx is not None
+           and winner_idx == human.seat_index)
     declared_won = bool(result.get("declarer_won")) and won
     declared_lost = bool(result.get("declarer_won") is False
                           and result.get("declarer_index") == (human.seat_index if human else -1))

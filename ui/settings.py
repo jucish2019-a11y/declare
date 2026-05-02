@@ -79,13 +79,14 @@ class SettingsMenu:
     def TAB_BAR_Y(self):
         return 134
 
+    # Simplified settings: 3 tabs instead of 6.
+    # Display = card layout + animations + atmosphere
+    # Gameplay = hand size + AI + mechanics
+    # Preferences = theme + text scale + audio + accessibility
     TABS = [
         ("display",        "Display"),
         ("gameplay",       "Gameplay"),
-        ("ai",             "AI"),
-        ("access",         "Accessibility"),
-        ("audio",          "Audio"),
-        ("profile",        "Profile"),
+        ("preferences",    "Preferences"),
     ]
 
     def __init__(self, screen):
@@ -355,15 +356,9 @@ class SettingsMenu:
         if self.tab == "display":
             self._draw_display(content_left, content_top, content_right, game_settings)
         elif self.tab == "gameplay":
-            self._draw_gameplay(content_left, content_top, content_right, game_settings)
-        elif self.tab == "ai":
-            self._draw_ai(content_left, content_top, content_right, game_settings, game_manager)
-        elif self.tab == "access":
-            self._draw_access(content_left, content_top, content_right, game_settings)
-        elif self.tab == "audio":
-            self._draw_audio(content_left, content_top, content_right, game_settings)
-        elif self.tab == "profile":
-            self._draw_profile(content_left, content_top, content_right, game_settings)
+            self._draw_gameplay(content_left, content_top, content_right, game_settings, game_manager)
+        elif self.tab == "preferences":
+            self._draw_preferences(content_left, content_top, content_right, game_settings, game_manager)
 
         bw, bh = 180, 44
         self._done_rect = pygame.Rect(
@@ -546,7 +541,7 @@ class SettingsMenu:
                       getattr(gs, 'atmospheric_lighting', True),
                       "atmospheric_lighting", rx)
 
-    def _draw_gameplay(self, lx, y, rx, gs):
+    def _draw_gameplay(self, lx, y, rx, gs, gm=None):
         y = self._section(lx, y, "Hand")
         y = self._row(lx, y, "Cards Per Hand",
                       list(zip(HAND_SIZE_OPTIONS, HAND_SIZE_LABELS)),
@@ -581,15 +576,16 @@ class SettingsMenu:
         y = self._row(lx, y, "Table Felt", felt_options,
                       getattr(gs, 'felt_style', 'forest'), "felt", rx)
 
-    def _draw_ai(self, lx, y, rx, gs, gm):
-        y = self._section(lx, y, "Difficulty")
+        # AI settings merged into Gameplay tab.
+        y += 8
+        y = self._section(lx, y, "AI")
         current_diff = "medium"
         if gm and gm.players:
             for p in gm.players:
                 if not p.is_human:
                     current_diff = gs.ai_difficulties.get(p.seat_index, "medium")
                     break
-        y = self._row(lx, y, "AI Difficulty",
+        y = self._row(lx, y, "Difficulty",
                       list(zip(AI_DIFFICULTY_OPTIONS, AI_DIFFICULTY_LABELS)),
                       current_diff, "ai_diff", rx)
         note = self.small_font.render(
@@ -598,14 +594,16 @@ class SettingsMenu:
         )
         self.screen.blit(note, (lx, y))
         y += 24
-
-        y = self._section(lx, y, "Pacing")
         y = self._row(lx, y, "AI Delay",
                       list(zip(AI_DELAY_OPTIONS, AI_DELAY_LABELS)),
                       gs.ai_delay, "ai_delay", rx)
         y = self._row(lx, y, "Peek Reveal",
                       list(zip(PEEK_REVEAL_OPTIONS, PEEK_REVEAL_LABELS)),
                       gs.peek_reveal_time, "peek_reveal", rx)
+
+    # Legacy alias for backward compatibility.
+    def _draw_ai(self, lx, y, rx, gs, gm):
+        self._draw_gameplay(lx, y, rx, gs, gm)
 
     def _draw_access(self, lx, y, rx, gs):
         prof = self._profile_ref
@@ -697,26 +695,74 @@ class SettingsMenu:
         )
         self.screen.blit(note, (lx, y))
 
-    def _draw_profile(self, lx, y, rx, gs):
+    def _draw_preferences(self, lx, y, rx, gs, gm=None):
+        """Combined Preferences tab: Theme + Accessibility + Audio + Profile stats."""
         prof = self._profile_ref
         if prof is None:
             ts = self.label_font.render(
-                "Profile not yet loaded.",
+                "Profile not yet loaded - preferences unavailable.",
                 True, TEXT_DIM,
             )
             self.screen.blit(ts, (lx, y))
             return
-        y = self._section(lx, y, "Streaming")
-        y = self._row(lx, y, "Streamer Mode", [(False, "OFF"), (True, "ON")],
-                      prof.settings.streamer_mode, "streamer", rx)
-        note = self.small_font.render(
-            "Streamer mode hides your hand from the bottom 220px of the screen.",
-            True, TEXT_DIM,
-        )
-        self.screen.blit(note, (lx, y))
-        y += 28
 
-        y = self._section(lx, y, "Stats")
+        # Theme + Text Scale
+        y = self._section(lx, y, "Theme")
+        from theme import (THEME_LABELS, UNLOCKABLE_THEMES,
+                           THEME_UNLOCK_CONDITIONS)
+        unlocked = list(getattr(prof, 'unlocked_themes', ['default']))
+        theme_options = [("default", THEME_LABELS["default"])]
+        for k in UNLOCKABLE_THEMES:
+            if k in unlocked:
+                theme_options.append((k, THEME_LABELS.get(k, k)))
+        for k in ("deutan", "protan", "tritan", "high_contrast"):
+            theme_options.append((k, THEME_LABELS.get(k, k)))
+        y = self._row(lx, y, "Theme", theme_options,
+                      prof.settings.theme, "theme", rx)
+        locked = [k for k in UNLOCKABLE_THEMES if k not in unlocked]
+        if locked:
+            from config import TEXT_DIM
+            for k in locked:
+                cond = THEME_UNLOCK_CONDITIONS.get(k, {})
+                hint = self.small_font.render(
+                    f"{THEME_LABELS.get(k, k)} — locked: {cond.get('label', '')}",
+                    True, TEXT_DIM,
+                )
+                self.screen.blit(hint, (lx, y))
+                y += hint.get_height() + 2
+            y += 6
+        y = self._row(lx, y, "Text Scale",
+                      [(0.8, "80%"), (1.0, "100%"), (1.25, "125%"), (1.5, "150%")],
+                      prof.settings.text_scale, "text_scale", rx)
+
+        # Accessibility
+        y += 8
+        y = self._section(lx, y, "Accessibility")
+        y = self._row(lx, y, "Motion",
+                      [(1.0, "Full"), (0.5, "Half"), (0.0, "Off")],
+                      prof.settings.motion_scale, "motion", rx)
+        y = self._row(lx, y, "Particles", [(True, "ON"), (False, "OFF")],
+                      prof.settings.particles_enabled, "particles", rx)
+        y = self._row(lx, y, "Captions", [(False, "OFF"), (True, "ON")],
+                      prof.settings.captions, "captions", rx)
+        y = self._row(lx, y, "Hints",
+                      [(0, "None"), (1, "Subtle"), (2, "Memory"), (3, "All")],
+                      prof.settings.hint_tier, "hint_tier", rx)
+
+        # Audio
+        y += 8
+        y = self._section(lx, y, "Audio")
+        opts = [(0.0, "Off"), (0.25, "Low"), (0.5, "Med"), (0.75, "High"), (1.0, "Max")]
+        y = self._row(lx, y, "Master", opts,
+                      max(prof.settings.sfx_volume, prof.settings.music_volume,
+                          prof.settings.voice_volume),
+                      "vol_master", rx)
+        y = self._row(lx, y, "SFX", opts, prof.settings.sfx_volume, "vol_sfx", rx)
+        y = self._row(lx, y, "Music", opts, prof.settings.music_volume, "vol_music", rx)
+
+        # Profile summary
+        y += 8
+        y = self._section(lx, y, "Profile")
         s = prof.stats
         rows = [
             ("Games Played", str(s.games_played)),
@@ -724,8 +770,6 @@ class SettingsMenu:
                           if s.games_played else "0"),
             ("Current Streak", str(s.current_win_streak)),
             ("Longest Streak", str(s.longest_win_streak)),
-            ("Pairs Made", str(s.pairs_made)),
-            ("Powers Used", str(s.powers_used)),
         ]
         for label, value in rows:
             l = self.label_font.render(label + ":", True, TEXT_DIM)
@@ -734,10 +778,12 @@ class SettingsMenu:
             self.screen.blit(v, (lx + 200, y))
             y += 24
 
-        y += 12
-        y = self._section(lx, y, "Tutorial")
-        complete = "Yes" if prof.tutorial_complete else "No"
-        l = self.label_font.render("Tutorial Complete:", True, TEXT_DIM)
-        self.screen.blit(l, (lx, y))
-        v = self.label_font.render(complete, True, TEXT_WHITE)
-        self.screen.blit(v, (lx + 200, y))
+    # Legacy aliases for backward compatibility.
+    def _draw_access(self, lx, y, rx, gs):
+        self._draw_preferences(lx, y, rx, gs)
+
+    def _draw_audio(self, lx, y, rx, gs):
+        self._draw_preferences(lx, y, rx, gs)
+
+    def _draw_profile(self, lx, y, rx, gs):
+        self._draw_preferences(lx, y, rx, gs)

@@ -456,15 +456,17 @@ class MenuScreen:
         base_y = int(SCREEN_HEIGHT * 0.65)
         SETTINGS_OLIVE = (110, 95, 50)
         SETTINGS_OLIVE_HOVER = (140, 122, 68)
-        self.play_button = Button(cx, base_y, bw, bh, "Play", SWAP_GREEN, SWAP_GREEN_HOVER)
-        self.tutorial_button = Button(cx, base_y + bh + bsp, bw, h48, "Tutorial", PEEK_BLUE, PEEK_BLUE_HOVER)
-        self.how_to_button = Button(cx, base_y + bh + h48 + bsp * 2, bw, h44, "How To Play", PAIR_TEAL, PAIR_TEAL_HOVER)
-        self.profile_button = Button(cx, base_y + bh + h48 + h44 + bsp * 3, bw, h44, "Profile & Stats", DISCARD_ORANGE, DISCARD_ORANGE_HOVER)
-        self.settings_button = Button(cx, base_y + bh + h48 + h44 * 2 + bsp * 4, bw, h44, "Settings", SETTINGS_OLIVE, SETTINGS_OLIVE_HOVER)
-        self.quit_button = Button(cx, base_y + bh + h48 + h44 * 3 + bsp * 5, bw, h44, "Quit", DECLARE_RED, DECLARE_RED_HOVER)
+        # Simplified menu: 3 primary actions only.
+        # Help combines Tutorial + How To Play.
+        # Settings and Profile are accessed in-game via the menu button.
+        self.play_button = Button(cx, base_y, bw, int(bh * 1.15), "Play",
+                                   SWAP_GREEN, SWAP_GREEN_HOVER, icon='play')
+        self.help_button = Button(cx, base_y + int(bh * 1.15) + bsp * 2, bw, h48,
+                                   PEEK_BLUE, PEEK_BLUE_HOVER, icon='tutorial')
+        self.quit_button = Button(cx, base_y + int(bh * 1.15) + h48 + bsp * 4, bw, h44,
+                                   DECLARE_RED, DECLARE_RED_HOVER, icon='quit')
         self.new_game_button = self.play_button
-        self.buttons = [self.play_button, self.tutorial_button, self.how_to_button,
-                        self.profile_button, self.settings_button, self.quit_button]
+        self.buttons = [self.play_button, self.help_button, self.quit_button]
         self._t = 0.0
 
     def _draw_card_back_medallion(self, surface, cx, cy, scale=1.0):
@@ -703,25 +705,15 @@ class MenuScreen:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.play_button.is_clicked(event.pos):
                 return 'new_game'
-            if self.tutorial_button.is_clicked(event.pos):
-                return 'tutorial'
-            if self.how_to_button.is_clicked(event.pos):
-                return 'how_to_play'
-            if self.profile_button.is_clicked(event.pos):
-                return 'profile'
-            if self.settings_button.is_clicked(event.pos):
-                return 'settings'
+            if self.help_button.is_clicked(event.pos):
+                return 'help'
             if self.quit_button.is_clicked(event.pos):
                 return 'quit'
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                 return 'new_game'
-            if event.key == pygame.K_t:
-                return 'tutorial'
             if event.key == pygame.K_h:
-                return 'how_to_play'
-            if event.key == pygame.K_p:
-                return 'profile'
+                return 'help'
             if event.key == pygame.K_q:
                 return 'quit'
         return None

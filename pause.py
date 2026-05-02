@@ -22,7 +22,6 @@ class PauseOverlay:
             ("resume",      "Resume"),
             ("restart",     "Restart Match"),
             ("settings",    "Settings"),
-            ("how_to_play", "How To Play"),
             ("quit_menu",   "Quit to Menu"),
         ]
         self.selected = 0

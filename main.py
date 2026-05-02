@@ -814,17 +814,8 @@ async def main():
                     current_screen = "setup"
                     setup_screen = SetupScreen(screen)
                     audio.play("click")
-                elif action == "tutorial":
-                    tutorial.start()
-                    audio.play("click")
-                elif action == "how_to_play":
+                elif action == "help":
                     current_screen = "how_to_play"
-                    audio.play("ui_open")
-                elif action == "profile":
-                    current_screen = "profile"
-                    audio.play("ui_open")
-                elif action == "settings":
-                    settings_open = True
                     audio.play("ui_open")
                 elif action == "quit":
                     profile_mod.save(prof)
@@ -965,33 +956,12 @@ async def main():
                         game_manager.cancel_targeting()
                         continue
 
-                    gear_rect = renderer.get_gear_rect()
-                    if gear_rect.collidepoint(mouse_pos):
-                        settings_open = not settings_open
-                        awaiting = None
-                        selected_slot = None
-                        swap_second_click = False
-                        pair_opponent_give_slot = None
-                        status_message = ""
-                        game_manager.cancel_targeting()
-                        audio.play("ui_open" if settings_open else "ui_close")
-                        continue
-
-                    if renderer.get_pause_rect().collidepoint(mouse_pos):
+                    menu_rect = renderer.get_menu_rect()
+                    if menu_rect.collidepoint(mouse_pos):
                         paused = True
                         pause.reset()
                         audio.duck(0.35)
                         audio.play("ui_open")
-                        continue
-
-                    if renderer.get_quit_rect().collidepoint(mouse_pos):
-                        profile_mod.save(prof)
-                        game_manager = None
-                        game_over_result = None
-                        current_screen = "menu"
-                        last_log_index = 0
-                        toasts.push("Match abandoned.", kind="info", icon="!", life=2.0)
-                        audio.play("ui_close")
                         continue
 
                     if clicked_btn:
@@ -1708,8 +1678,6 @@ async def main():
                 settings_menu.draw(game_settings, game_manager, mouse_pos)
             elif game_manager:
                 renderer.draw_gear_icon(mouse_pos, settings_open)
-        elif current_screen == "menu" and settings_open:
-            settings_menu.draw(game_settings, None, mouse_pos)
 
         particles.draw(screen)
         # Atmospheric overlays (lamp flare + vignette) honor both the user's

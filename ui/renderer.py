@@ -2331,53 +2331,37 @@ class Renderer:
         scale = get_mobile_scale()
         return int(44 * scale), int(42 * scale)
 
-    def get_gear_rect(self):
+    def get_menu_rect(self):
+        """Single consolidated menu button replacing gear/pause/quit trio."""
         w, h = self._hud_size()
         return pygame.Rect(SCREEN_WIDTH - w - 12, ACTION_BAR_Y + 16, w, h)
 
+    # Legacy rect accessors for backward compat during transition.
+    def get_gear_rect(self):
+        return self.get_menu_rect()
+
     def get_pause_rect(self):
-        w, h = self._hud_size()
-        return pygame.Rect(SCREEN_WIDTH - w * 2 - 24, ACTION_BAR_Y + 16, w, h)
+        return self.get_menu_rect()
 
     def get_quit_rect(self):
-        w, h = self._hud_size()
-        return pygame.Rect(SCREEN_WIDTH - w * 3 - 36, ACTION_BAR_Y + 16, w, h)
+        return self.get_menu_rect()
 
     def _draw_hud_buttons(self, mouse_pos):
         th = theme_mod.active()
         scale = get_mobile_scale()
-        for rect, glyph_kind, tooltip in (
-            (self.get_quit_rect(),  "x",     "Quit to menu"),
-            (self.get_pause_rect(), "pause", "Pause"),
-            (self.get_gear_rect(),  "gear",  "Settings"),
-        ):
-            hovered = rect.collidepoint(mouse_pos)
-            pygame.draw.rect(self.screen, (60, 60, 60) if not hovered else (90, 90, 90),
-                             rect, border_radius=8)
-            pygame.draw.rect(self.screen, th.brass_500, rect, 1, border_radius=8)
-            cx, cy = rect.center
-            color = th.brass_300 if hovered else th.brass_300
-            if glyph_kind == "gear":
-                r = int(9 * scale)
-                pygame.draw.circle(self.screen, color, (cx, cy), r, 2)
-                pygame.draw.circle(self.screen, color, (cx, cy), max(2, int(3 * scale)))
-                for k in range(8):
-                    a = math.pi * 2 * k / 8
-                    x1 = cx + int(math.cos(a) * r + 1)
-                    y1 = cy + int(math.sin(a) * r + 1)
-                    x2 = cx + int(math.cos(a) * (r + int(3 * scale)))
-                    y2 = cy + int(math.sin(a) * (r + int(3 * scale)))
-                    pygame.draw.line(self.screen, color, (x1, y1), (x2, y2), max(1, int(2 * scale)))
-            elif glyph_kind == "pause":
-                bar_w = max(3, int(4 * scale))
-                bar_h = int(16 * scale)
-                pygame.draw.rect(self.screen, color,
-                                 pygame.Rect(cx - bar_w - 3, cy - bar_h // 2, bar_w, bar_h),
-                                 border_radius=1)
-                pygame.draw.rect(self.screen, color,
-                                 pygame.Rect(cx + 3, cy - bar_h // 2, bar_w, bar_h),
-                                 border_radius=1)
-            elif glyph_kind == "x":
-                off = int(7 * scale)
-                pygame.draw.line(self.screen, color, (cx - off, cy - off), (cx + off, cy + off), max(1, int(2 * scale)))
-                pygame.draw.line(self.screen, color, (cx + off, cy - off), (cx - off, cy + off), max(1, int(2 * scale)))
+        rect = self.get_menu_rect()
+        hovered = rect.collidepoint(mouse_pos)
+        pygame.draw.rect(self.screen, (60, 60, 60) if not hovered else (90, 90, 90),
+                         rect, border_radius=8)
+        pygame.draw.rect(self.screen, th.brass_500, rect, 1, border_radius=8)
+        cx, cy = rect.center
+        color = th.brass_300 if hovered else th.brass_300
+
+        # Hamburger icon: three horizontal lines.
+        line_w = int(16 * scale)
+        line_h = max(2, int(2 * scale))
+        gap = int(5 * scale)
+        for i in range(3):
+            ly = cy - gap + i * gap
+            pygame.draw.line(self.screen, color,
+                             (cx - line_w // 2, ly), (cx + line_w // 2, ly), line_h)

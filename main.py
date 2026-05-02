@@ -325,14 +325,29 @@ class _ScaledDisplay:
         except Exception:
             pass
 
-    def to_logical(self, pos):
+    def canvas_rect(self):
+        """Return (offset_x, offset_y, target_w, target_h) for the centered
+        2560x1440 canvas inside the current window, scaled uniformly to fit
+        without distortion. Used by present() and to_logical()."""
         win_w, win_h = self.window.get_size()
         if win_w <= 0 or win_h <= 0:
+            return (0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+        s = min(win_w / SCREEN_WIDTH, win_h / SCREEN_HEIGHT)
+        tw = max(1, int(SCREEN_WIDTH * s))
+        th = max(1, int(SCREEN_HEIGHT * s))
+        ox = (win_w - tw) // 2
+        oy = (win_h - th) // 2
+        return (ox, oy, tw, th)
+
+    def to_logical(self, pos):
+        ox, oy, tw, th = self.canvas_rect()
+        if tw <= 0 or th <= 0:
             return pos
-        return (
-            int(pos[0] * SCREEN_WIDTH / win_w),
-            int(pos[1] * SCREEN_HEIGHT / win_h),
-        )
+        lx = int((pos[0] - ox) * SCREEN_WIDTH / tw)
+        ly = int((pos[1] - oy) * SCREEN_HEIGHT / th)
+        lx = max(0, min(SCREEN_WIDTH - 1, lx))
+        ly = max(0, min(SCREEN_HEIGHT - 1, ly))
+        return (lx, ly)
 
     def toggle_fullscreen(self):
         if sys.platform == "emscripten":
@@ -347,22 +362,32 @@ class _ScaledDisplay:
     def set_shake(self, offset):
         self.shake_offset = offset
 
-    def present(self):
-        win_size = self.window.get_size()
-        ox, oy = self.shake_offset
-        if ox or oy:
+    def present(self, frame_mode="menu"):
+        win_w, win_h = self.window.get_size()
+        ox, oy, tw, th = self.canvas_rect()
+
+        sx, sy = self.shake_offset
+        if sx or sy:
             shaken = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
             shaken.fill((0, 0, 0))
-            shaken.blit(self.logical, (ox, oy))
+            shaken.blit(self.logical, (sx, sy))
             source = shaken
         else:
             source = self.logical
 
-        if win_size == (SCREEN_WIDTH, SCREEN_HEIGHT):
-            self.window.blit(source, (0, 0))
+        # Paint the letterbox bars when the window aspect doesn't match 2560x1440.
+        if (tw, th) != (win_w, win_h):
+            if frame_mode == "felt":
+                from ui.renderer import get_felt_texture
+                self.window.blit(get_felt_texture((win_w, win_h)), (0, 0))
+            else:
+                from ui.screens import get_menu_bg_texture
+                self.window.blit(get_menu_bg_texture((win_w, win_h)), (0, 0))
+
+        if (tw, th) == (SCREEN_WIDTH, SCREEN_HEIGHT):
+            self.window.blit(source, (ox, oy))
         else:
-            scaled = pygame.transform.smoothscale(source, win_size)
-            self.window.blit(scaled, (0, 0))
+            self.window.blit(pygame.transform.smoothscale(source, (tw, th)), (ox, oy))
         pygame.display.flip()
 
 
@@ -372,11 +397,11 @@ def _translate_mouse_event(event, display):
         attrs = dict(event.__dict__)
         attrs['pos'] = new_pos
         if event.type == pygame.MOUSEMOTION and 'rel' in attrs:
-            win_w, win_h = display.window.get_size()
-            if win_w > 0 and win_h > 0:
+            _, _, tw, th = display.canvas_rect()
+            if tw > 0 and th > 0:
                 attrs['rel'] = (
-                    int(attrs['rel'][0] * SCREEN_WIDTH / win_w),
-                    int(attrs['rel'][1] * SCREEN_HEIGHT / win_h),
+                    int(attrs['rel'][0] * SCREEN_WIDTH / tw),
+                    int(attrs['rel'][1] * SCREEN_HEIGHT / th),
                 )
         return pygame.event.Event(event.type, attrs)
     # Convert finger events to synthetic mouse events for touch support
@@ -1718,7 +1743,8 @@ async def main():
             access_panel.draw(screen, prof, game_settings)
 
         display.set_shake(cam.offset())
-        display.present()
+        frame_mode = "felt" if current_screen == "game" else "menu"
+        display.present(frame_mode)
 
     pygame.quit()
     sys.exit()

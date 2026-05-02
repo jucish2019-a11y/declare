@@ -41,6 +41,7 @@ def _draw_screens_brass_ornament(surface, cx, cy, th):
 
 
 _MENU_BG_CACHE = {'surface': None, 'mtime': None}
+_MENU_BG_WINDOW_CACHE = {'key': None, 'surface': None}
 
 
 def _screen_background():
@@ -81,6 +82,51 @@ def _screen_background():
     out.blit(scaled, ((SCREEN_WIDTH - sw) // 2, (SCREEN_HEIGHT - sh) // 2))
     _MENU_BG_CACHE['surface'] = out
     _MENU_BG_CACHE['mtime'] = mtime
+    return out
+
+
+def get_menu_bg_texture(size):
+    """Return a window-sized cover-fit of the shared menu backdrop.
+
+    Used by the Display layer to fill letterbox bars on non-design-aspect
+    windows so menus, setup, peek, and game-over share a continuous
+    backdrop at any window size. Falls back to a cover-fit of the
+    procedural parlor backdrop when `assets/menu_bg.png` is missing."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, '..', 'assets', 'menu_bg.png')
+    path = os.path.normpath(path)
+    try:
+        mtime = os.path.getmtime(path) if os.path.exists(path) else None
+    except OSError:
+        mtime = None
+
+    if mtime is None:
+        import theme as theme_mod
+        th = theme_mod.active()
+        theme_key = (th.name,
+                     getattr(th, 'is_atmospheric', True),
+                     getattr(th, 'high_contrast', False))
+        cache_key = ('parlor', theme_key, size)
+    else:
+        cache_key = ('image', mtime, size)
+
+    if _MENU_BG_WINDOW_CACHE['key'] == cache_key:
+        return _MENU_BG_WINDOW_CACHE['surface']
+
+    if mtime is None:
+        import theme as theme_mod
+        base = parlor_backdrop(theme_mod.active())
+    else:
+        base = pygame.image.load(path).convert()
+    bw, bh = base.get_size()
+    scale = max(size[0] / bw, size[1] / bh)
+    sw = max(size[0], int(bw * scale))
+    sh = max(size[1], int(bh * scale))
+    scaled = pygame.transform.smoothscale(base, (sw, sh))
+    out = pygame.Surface(size)
+    out.blit(scaled, ((size[0] - sw) // 2, (size[1] - sh) // 2))
+    _MENU_BG_WINDOW_CACHE['key'] = cache_key
+    _MENU_BG_WINDOW_CACHE['surface'] = out
     return out
 
 

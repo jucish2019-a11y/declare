@@ -36,6 +36,28 @@ SEAT_POSITIONS_3 = {0: PLAYER_BOTTOM, 1: (672, 320), 2: (1888, 320)}
 SEAT_POSITIONS_4 = {0: PLAYER_BOTTOM, 1: PLAYER_LEFT, 2: PLAYER_TOP, 3: PLAYER_RIGHT}
 
 
+_FELT_WINDOW_CACHE = {'key': None, 'surface': None}
+
+
+def get_felt_texture(size):
+    """Return a window-sized surface filled with the theme's room-shadow color.
+
+    Used by the Display layer to fill letterbox bars during gameplay so the
+    bars read as the dim room around the felt oval rather than as a stretched
+    or distorted felt copy. Mirrors the base fill in `_build_felt_cache`
+    (which begins with `out.fill(felt_shadow)` before painting the oval)."""
+    th = theme_mod.active()
+    shadow_col = getattr(th, 'felt_shadow', th.felt_rim)
+    cache_key = (th.name, tuple(shadow_col), size)
+    if _FELT_WINDOW_CACHE['key'] == cache_key:
+        return _FELT_WINDOW_CACHE['surface']
+    out = pygame.Surface(size)
+    out.fill(shadow_col)
+    _FELT_WINDOW_CACHE['key'] = cache_key
+    _FELT_WINDOW_CACHE['surface'] = out
+    return out
+
+
 def _player_area_bounds(seat_index, num_players):
     if num_players == 2:
         return PLAYER_AREA_2.get(seat_index, PLAYER_AREA_2[0])

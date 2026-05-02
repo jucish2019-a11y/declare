@@ -38,7 +38,7 @@ from ui.online_screens import NicknameScreen, OnlineMenuScreen, OnlineLobbyScree
 from ui.settings import SettingsMenu
 import online.client as online_client_mod
 from online.proxy_manager import ProxyGameManager
-DEFAULT_ONLINE_URL = os.environ.get("DECLARE_ONLINE_URL", "ws://127.0.0.1:8765")
+from online.url import resolve_url as _resolve_online_url, url_label as _online_url_label
 
 import theme
 import audio
@@ -942,8 +942,12 @@ async def main():
                         oc = online_client_mod.client()
                         if oc.status not in (online_client_mod.STATUS_CONNECTING,
                                               online_client_mod.STATUS_CONNECTED):
-                            oc.connect(DEFAULT_ONLINE_URL)
-                        online_menu_screen.set_status("Connecting to server...")
+                            online_url = _resolve_online_url()
+                            oc.connect(online_url)
+                            online_menu_screen.set_status(
+                                f"Connecting to {_online_url_label(online_url)}...")
+                        else:
+                            online_menu_screen.set_status("Connecting...")
                         current_screen = "online_menu"
                         audio.play("click")
 
@@ -1799,7 +1803,8 @@ async def main():
                           "nickname": online_pending_nickname,
                           "client_id": prof.client_id or "anon"})
                 online_pending_nickname = ""
-                online_menu_screen.set_status("Connected.")
+                online_menu_screen.set_status(
+                    f"Connected to {_online_url_label(_resolve_online_url())}")
                 if online_pending_create:
                     payload = {
                         "type": "create_room",

@@ -807,25 +807,81 @@ class Renderer:
         self.screen.blit(border_surf, (rx - 4, ry - 4))
 
     def draw_game_log(self, log_entries):
+        th = theme_mod.active()
         panel_rect = pygame.Rect(LOG_PANEL_X, LOG_PANEL_Y, LOG_PANEL_W, LOG_PANEL_H)
+
         panel_surf = pygame.Surface((LOG_PANEL_W, LOG_PANEL_H), pygame.SRCALPHA)
-        panel_surf.fill((*PANEL_BG, 220))
+        for i in range(LOG_PANEL_H):
+            t = i / max(1, LOG_PANEL_H - 1)
+            r = int(th.brass_900[0] * (0.34 + 0.18 * (1 - t)))
+            g = int(th.brass_900[1] * (0.34 + 0.18 * (1 - t)))
+            b = int(th.brass_900[2] * (0.34 + 0.18 * (1 - t)))
+            pygame.draw.line(panel_surf, (r, g, b, 232), (0, i), (LOG_PANEL_W, i))
+        mask = pygame.Surface(panel_surf.get_size(), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=10)
+        panel_surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         self.screen.blit(panel_surf, (LOG_PANEL_X, LOG_PANEL_Y))
-        pygame.draw.rect(self.screen, PANEL_BORDER, panel_rect, 1, border_radius=4)
-        header_surf = self.ui_font.render("Game Log", True, GOLD)
-        self.screen.blit(header_surf, (LOG_PANEL_X + 13, LOG_PANEL_Y + 10))
-        pygame.draw.line(self.screen, PANEL_BORDER, (LOG_PANEL_X + 6, LOG_PANEL_Y + 48), (LOG_PANEL_X + LOG_PANEL_W - 6, LOG_PANEL_Y + 48))
+
+        pygame.draw.line(self.screen, th.brass_300,
+                         (LOG_PANEL_X + 12, LOG_PANEL_Y + 1),
+                         (LOG_PANEL_X + LOG_PANEL_W - 12, LOG_PANEL_Y + 1), 1)
+        pygame.draw.line(self.screen, th.brass_500,
+                         (LOG_PANEL_X + 12, LOG_PANEL_Y + 2),
+                         (LOG_PANEL_X + LOG_PANEL_W - 12, LOG_PANEL_Y + 2), 1)
+        pygame.draw.rect(self.screen, th.brass_700, panel_rect, 2, border_radius=10)
+
+        header_font = typo.header_italic(34)
+        header_surf = header_font.render("Game Log", True, th.brass_300)
+        header_pos = (LOG_PANEL_X + 22, LOG_PANEL_Y + 10)
+        self.screen.blit(header_surf, header_pos)
+
+        ornament = self.small_font.render("❖", True, th.brass_500)
+        ornament_x = LOG_PANEL_X + LOG_PANEL_W - 22 - ornament.get_width()
+        ornament_y = LOG_PANEL_Y + 10 + (header_surf.get_height() - ornament.get_height()) // 2
+        self.screen.blit(ornament, (ornament_x, ornament_y))
+
+        sep_y = LOG_PANEL_Y + header_surf.get_height() + 18
+        pygame.draw.line(self.screen, th.brass_700,
+                         (LOG_PANEL_X + 18, sep_y),
+                         (LOG_PANEL_X + LOG_PANEL_W - 18, sep_y), 1)
+        pygame.draw.line(self.screen, th.brass_500,
+                         (LOG_PANEL_X + 18, sep_y + 3),
+                         (LOG_PANEL_X + LOG_PANEL_W - 18, sep_y + 3), 1)
+
+        content_top = sep_y + 14
+
         if not log_entries:
+            empty_font = typo.body_italic(22)
+            empty = empty_font.render("Awaiting the first move...", True, th.text_muted)
+            er = empty.get_rect(midtop=(LOG_PANEL_X + LOG_PANEL_W // 2, content_top + 12))
+            self.screen.blit(empty, er)
             return
+
         visible = log_entries[-10:]
+        n = len(visible)
+        bullet_x = LOG_PANEL_X + 22
+        text_x = LOG_PANEL_X + 40
+        line_h = 34
+        max_text_w = LOG_PANEL_W - (text_x - LOG_PANEL_X) - 14
+
         for i, entry in enumerate(visible):
-            text = str(entry)
-            if len(text) > 56:
-                text = text[:53] + "..."
-            if isinstance(entry, dict):
-                text = str(entry.get('text', entry))[:56]
-            entry_surf = self.log_font.render(text, True, TEXT_WHITE)
-            self.screen.blit(entry_surf, (LOG_PANEL_X + 13, LOG_PANEL_Y + 58 + i * 35))
+            text = str(entry.get('text', entry)) if isinstance(entry, dict) else str(entry)
+            if self.log_font.size(text)[0] > max_text_w:
+                while text and self.log_font.size(text + "…")[0] > max_text_w:
+                    text = text[:-1]
+                text = text + "…"
+
+            age = (n - 1 - i)
+            alpha = max(120, 255 - age * 13)
+            y = content_top + i * line_h
+
+            bullet_surf = self.log_font.render("◆", True, th.brass_500)
+            bullet_surf.set_alpha(alpha)
+            self.screen.blit(bullet_surf, (bullet_x, y))
+
+            line_surf = self.log_font.render(text, True, th.text_white)
+            line_surf.set_alpha(alpha)
+            self.screen.blit(line_surf, (text_x, y))
 
     def draw_action_buttons(self, action_buttons):
         th = theme_mod.active()

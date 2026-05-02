@@ -121,42 +121,44 @@ def _build_action_buttons(gm, ui_font, game_settings=None):
         return buttons
     mobile = is_mobile()
     scale = get_mobile_scale()
-    btn_h = int(48 * scale)
-    spacing = int(8 * scale)
-    margin = 16
+    btn_h = int(64 * scale)
+    spacing = int(10 * scale)
+    margin = 18
     max_row_w = SCREEN_WIDTH - margin * 2
 
-    # Helper to place buttons with wrapping
+    # Helper to place buttons with wrapping. Each item is now a 6-tuple including
+    # an icon kind so the renderer can draw the matching glyph next to the label.
     def _place(button_list):
-        # button_list: [(key, width, text, color, hover_color)]
         rows = [[]]
         row_w = 0
         for item in button_list:
-            key, w, text, color, hover_color = item
+            key, w, text, color, hover_color, icon = item
             if rows[-1] and row_w + w + spacing > max_row_w:
                 rows.append([])
                 row_w = 0
             rows[-1].append(item)
             row_w += w + spacing
 
-        # Center each row and stack vertically
         base_y = ACTION_BAR_Y + ACTION_BAR_H // 2
         total_h = len(rows) * (btn_h + spacing) - spacing
         for r_idx, row in enumerate(rows):
-            row_width = sum(w for _, w, _, _, _ in row) + spacing * max(0, len(row) - 1)
+            row_width = sum(w for _, w, _, _, _, _ in row) + spacing * max(0, len(row) - 1)
             x = (SCREEN_WIDTH - row_width) // 2
             y = base_y - total_h // 2 + r_idx * (btn_h + spacing)
-            for key, w, text, color, hover_color in row:
+            for key, w, text, color, hover_color, icon in row:
                 rect = pygame.Rect(x, y - btn_h // 2, w, btn_h)
-                buttons[key] = {'rect': rect, 'text': text, 'color': color, 'hover_color': hover_color, 'font': ui_font}
+                buttons[key] = {
+                    'rect': rect, 'text': text, 'color': color,
+                    'hover_color': hover_color, 'font': ui_font, 'icon': icon,
+                }
                 x += w + spacing
 
     if gm.state == GameState.TURN_START:
         items = []
         if 'declare' in valid:
-            items.append(('declare', int(160 * scale), 'Declare', DECLARE_RED, DECLARE_RED_HOVER))
+            items.append(('declare', int(200 * scale), 'Declare', DECLARE_RED, DECLARE_RED_HOVER, 'declare'))
         if 'draw' in valid:
-            items.append(('draw', int(140 * scale), 'Draw', SWAP_GREEN, SWAP_GREEN_HOVER))
+            items.append(('draw', int(180 * scale), 'Draw', SWAP_GREEN, SWAP_GREEN_HOVER, 'draw'))
         _place(items)
 
     elif gm.state == GameState.DECIDE:
@@ -165,37 +167,41 @@ def _build_action_buttons(gm, ui_font, game_settings=None):
             if gm.drawn_card_resolved:
                 pairs = can_self_pair(cp)
                 if pairs:
-                    items.append(('self_pair', int(110 * scale), 'Self-Pair', SELF_PAIR_COLOR, SELF_PAIR_HOVER))
+                    items.append(('self_pair', int(195 * scale), 'Self-Pair', SELF_PAIR_COLOR, SELF_PAIR_HOVER, 'pair'))
         if 'play_power' in valid and gm.drawn_card and gm.drawn_card.power:
             power = gm.drawn_card.power
             label = POWER_LABELS.get(power, 'Power')
-            items.append(('play_power', int(150 * scale), label, PEEK_BLUE, PEEK_BLUE_HOVER))
+            items.append(('play_power', int(220 * scale), label, PEEK_BLUE, PEEK_BLUE_HOVER, 'power'))
         if 'swap' in valid:
-            items.append(('swap', int(110 * scale), 'Swap', SWAP_GREEN, SWAP_GREEN_HOVER))
+            items.append(('swap', int(160 * scale), 'Swap', SWAP_GREEN, SWAP_GREEN_HOVER, 'swap'))
         if 'discard' in valid:
-            items.append(('discard', int(120 * scale), 'Discard', DISCARD_ORANGE, DISCARD_ORANGE_HOVER))
+            items.append(('discard', int(200 * scale), 'Discard', DISCARD_ORANGE, DISCARD_ORANGE_HOVER, 'discard'))
         if 'pair_own' in valid:
-            items.append(('pair_own', int(130 * scale), 'Pair Own', PAIR_TEAL, PAIR_TEAL_HOVER))
+            items.append(('pair_own', int(200 * scale), 'Pair Own', PAIR_TEAL, PAIR_TEAL_HOVER, 'pair'))
         if 'pair_opponent' in valid:
-            items.append(('pair_opponent', int(160 * scale), 'Pair Opponent', PAIR_TEAL, PAIR_TEAL_HOVER))
+            items.append(('pair_opponent', int(255 * scale), 'Pair Opponent', PAIR_TEAL, PAIR_TEAL_HOVER, 'pair'))
         if 'declare' in valid:
-            items.append(('declare', int(130 * scale), 'Declare', DECLARE_RED, DECLARE_RED_HOVER))
+            items.append(('declare', int(195 * scale), 'Declare', DECLARE_RED, DECLARE_RED_HOVER, 'declare'))
+        # Shuffle is a free utility. It belongs on the action rail, not floating
+        # between the hand and the rail. Add it last so it reads as secondary.
+        if game_settings and game_settings.shuffle_enabled and cp.is_human:
+            items.append(('shuffle', int(180 * scale), 'Shuffle', SHUFFLE_COLOR, SHUFFLE_HOVER, 'shuffle'))
         _place(items)
 
     elif gm.state == GameState.REACTION_WINDOW:
         items = []
         rank = gm.reaction_rank
         label = f"Drop {rank}!"
-        items.append(('drop_self', int(140 * scale), label, DROP_MATCH_COLOR, DROP_MATCH_HOVER))
+        items.append(('drop_self', int(200 * scale), label, DROP_MATCH_COLOR, DROP_MATCH_HOVER, 'drop'))
         if gm.reaction_source_player is not None:
             for opp in gm.players:
                 if opp.seat_index == gm.reaction_source_player or opp.is_human:
                     continue
                 opp_slots = can_call_opponent_card(cp, opp, rank)
                 if opp_slots:
-                    items.append(('drop_opponent', int(180 * scale), f"Call {opp.name}'s {rank}", PAIR_TEAL, PAIR_TEAL_HOVER))
+                    items.append(('drop_opponent', int(275 * scale), f"Call {opp.name}'s {rank}", PAIR_TEAL, PAIR_TEAL_HOVER, 'drop'))
                     break
-        items.append(('pass_reaction', int(100 * scale), 'Pass', CANCEL_GRAY, CANCEL_GRAY_HOVER))
+        items.append(('pass_reaction', int(160 * scale), 'Pass', CANCEL_GRAY, CANCEL_GRAY_HOVER, 'pass'))
         _place(items)
 
     return buttons
@@ -207,17 +213,6 @@ def _build_cancel_button(text, ui_font):
     h = int(44 * scale)
     rect = pygame.Rect(SCREEN_WIDTH // 2 - w // 2, ACTION_BAR_Y + ACTION_BAR_H + 2, w, h)
     return {'rect': rect, 'text': text, 'font': ui_font}
-
-
-def _build_shuffle_button(player, seat_position, ui_font):
-    scale = get_mobile_scale()
-    px, py = seat_position
-    w = int(90 * scale)
-    h = int(36 * scale)
-    sx = px - w // 2
-    sy = py + CARD_HEIGHT // 2 + int(44 * scale)
-    rect = pygame.Rect(sx, sy, w, h)
-    return {'rect': rect, 'text': 'Shuffle', 'color': SHUFFLE_COLOR, 'hover_color': SHUFFLE_HOVER, 'font': ui_font}
 
 
 def _ai_power_target(ai, player, players, card):
@@ -573,8 +568,15 @@ async def main():
         if not paused:
             game_dt = dt * time_scale
             if current_screen == "game" and game_manager is not None:
-                particles.ambient_dust(SCREEN_WIDTH, SCREEN_HEIGHT,
-                                       color=theme.active().lamp_glow)
+                if (theme.active().particles_enabled
+                        and theme.active().motion_scale > 0.1
+                        and getattr(game_settings, 'atmospheric_lighting', True)
+                        and getattr(theme.active(), 'is_atmospheric', True)):
+                    particles.ambient_parlor_motes(
+                        SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
+                        1120, 608,
+                        color=theme.active().lamp_glow,
+                    )
 
         if game_manager and not paused:
             game_manager.update(dt)
@@ -594,7 +596,7 @@ async def main():
             log = getattr(game_manager, "game_log", [])
             while last_log_index < len(log):
                 _react_to_log_entry(log[last_log_index], particles, toasts, game_manager, renderer,
-                                    cam=cam, edge_flash=edge_flash, timewarp=timewarp,
+                                    cam=cam, edge_flash=edge_flash, timewarp=timewarp, lamp=lamp,
                                     hints=hint_engine, last_human_action=last_human_action,
                                     captions=captions if game_settings.captions else None)
                 last_log_index += 1
@@ -793,6 +795,20 @@ async def main():
                             continue
 
             if current_screen == "menu":
+                if settings_open:
+                    result = settings_menu.handle_event(event, game_settings, None)
+                    if result == 'close':
+                        settings_open = False
+                        audio.play("ui_close")
+                    elif result == 'updated':
+                        prof.settings.captions = game_settings.captions
+                        prof.settings.coach_mode = game_settings.coach_mode
+                        prof.settings.streamer_mode = game_settings.streamer_mode
+                        prof.settings.hint_tier = game_settings.hint_tier
+                        prof.settings.motion_scale = game_settings.motion_scale
+                        prof.settings.particles_enabled = game_settings.particles_enabled
+                        profile_mod.save(prof)
+                    continue
                 action = menu_screen.handle_event(event)
                 if action == "new_game":
                     current_screen = "setup"
@@ -806,6 +822,9 @@ async def main():
                     audio.play("ui_open")
                 elif action == "profile":
                     current_screen = "profile"
+                    audio.play("ui_open")
+                elif action == "settings":
+                    settings_open = True
                     audio.play("ui_open")
                 elif action == "quit":
                     profile_mod.save(prof)
@@ -975,14 +994,6 @@ async def main():
                         audio.play("ui_close")
                         continue
 
-                    if game_settings and game_settings.shuffle_enabled and human_idx is not None:
-                        num_players = len(game_manager.players)
-                        seat_pos = _get_seat_position(human_idx, num_players)
-                        shuffle_btn = _build_shuffle_button(game_manager.players[human_idx], seat_pos, ui_font)
-                        if shuffle_btn['rect'].collidepoint(mouse_pos):
-                            game_manager.shuffle_player_hand(human_idx)
-                            continue
-
                     if clicked_btn:
                         if clicked_btn == 'draw' and game_manager.state == GameState.TURN_START:
                             game_manager.draw_card()
@@ -1083,6 +1094,10 @@ async def main():
                             status_message = ""
                             if turn_end_timer <= 0:
                                 turn_end_timer = 0.01
+
+                        elif clicked_btn == 'shuffle' and human_idx is not None:
+                            game_manager.shuffle_player_hand(human_idx)
+                            audio.play("shuffle")
 
                     else:
                         if awaiting is not None:
@@ -1665,19 +1680,6 @@ async def main():
                 if notification_text:
                     renderer.draw_reaction_result(notification_text, screen)
 
-                if game_settings and game_settings.shuffle_enabled and cp.is_human and human_idx is not None:
-                    num_players = len(game_manager.players)
-                    seat_pos = _get_seat_position(human_idx, num_players)
-                    shuffle_btn = _build_shuffle_button(game_manager.players[human_idx], seat_pos, ui_font)
-                    hovered = shuffle_btn['rect'].collidepoint(mouse_pos)
-                    color = shuffle_btn['hover_color'] if hovered else shuffle_btn['color']
-                    pygame.draw.rect(screen, color, shuffle_btn['rect'], border_radius=6)
-                    pygame.draw.rect(screen, (30, 30, 35), shuffle_btn['rect'], 1, border_radius=6)
-                    btn_font = shuffle_btn['font']
-                    text_surf = btn_font.render(shuffle_btn['text'], True, TEXT_WHITE)
-                    text_rect = text_surf.get_rect(center=shuffle_btn['rect'].center)
-                    screen.blit(text_surf, text_rect)
-
                 if game_manager.state == GameState.REACTION_WINDOW:
                     font = _load_font('ui', 28, bold=True)
                     remaining = max(0, game_manager.reaction_timer)
@@ -1706,11 +1708,22 @@ async def main():
                 settings_menu.draw(game_settings, game_manager, mouse_pos)
             elif game_manager:
                 renderer.draw_gear_icon(mouse_pos, settings_open)
+        elif current_screen == "menu" and settings_open:
+            settings_menu.draw(game_settings, None, mouse_pos)
 
         particles.draw(screen)
+        # Atmospheric overlays (lamp flare + vignette) honor both the user's
+        # display preference AND the active theme's `is_atmospheric` flag.
+        # Minimal theme reports is_atmospheric=False so it stays flat.
+        atmo_active = (
+            getattr(game_settings, 'atmospheric_lighting', True)
+            and getattr(theme.active(), 'is_atmospheric', True)
+        )
+        if current_screen == "game" and atmo_active:
+            lamp.draw(screen)
         edge_flash.draw(screen)
-        if current_screen == "game":
-            screen.blit(vignette.get(0.45), (0, 0))
+        if current_screen == "game" and atmo_active:
+            screen.blit(vignette.get(), (0, 0))
         if current_screen == "game" and game_settings.streamer_mode:
             stream_cover = pygame.Surface((SCREEN_WIDTH, 352), pygame.SRCALPHA)
             stream_cover.fill((0, 0, 0, 220))
@@ -1790,6 +1803,7 @@ def _finalize_game_stats(prof, gm, result, meta, game_start_time, toasts, partic
 
     profile_mod.record_game_result(prof, meta_out)
     newly = profile_mod.evaluate_achievements(prof, meta_out)
+    newly_themes = profile_mod.check_theme_unlocks(prof)
     profile_mod.save(prof)
 
     for key in newly:
@@ -1800,9 +1814,21 @@ def _finalize_game_stats(prof, gm, result, meta, game_start_time, toasts, partic
         audio.play("achievement")
         queue.append(key)
 
+    # Theme unlock toasts use the achievement kind so they share the brass
+    # "★" treatment — the unlock IS an achievement, just for cosmetics.
+    try:
+        from theme import THEME_LABELS
+    except ImportError:
+        THEME_LABELS = {}
+    for tk in newly_themes:
+        label = THEME_LABELS.get(tk, tk)
+        toasts.push(f"New theme unlocked: {label}", kind="achievement", icon="★", life=4.5)
+        particles.burst_achievement(1536, 864)
+        audio.play("achievement")
+
 
 def _react_to_log_entry(entry, particles, toasts, gm, renderer,
-                        cam=None, edge_flash=None, timewarp=None,
+                        cam=None, edge_flash=None, timewarp=None, lamp=None,
                         hints=None, last_human_action=None,
                         captions=None):
     def cap(key):
@@ -1853,6 +1879,7 @@ def _react_to_log_entry(entry, particles, toasts, gm, renderer,
         if cam: cam.kick(amp=4.0, duration=0.45, freq=18)
         if edge_flash: edge_flash.fire(duration=0.9, thickness=58)
         if timewarp: timewarp.slowmo(factor=0.45, duration=1.4)
+        if lamp: lamp.flare(amp=1.4, duration=0.6)
     elif "wrong card" in low or "penalty" in low:
         audio.play("wrong_react"); cap("wrong_react")
         particles.burst_penalty(1536, 864)

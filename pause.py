@@ -2,17 +2,17 @@
 import pygame
 
 import theme
-from config import SCREEN_WIDTH, SCREEN_HEIGHT
+from config import SCREEN_WIDTH, SCREEN_HEIGHT, get_mobile_scale
 
 
 class PauseOverlay:
     @property
     def _panel_w(self):
-        return min(480, int(SCREEN_WIDTH * 0.19))
+        return min(768, int(SCREEN_WIDTH * 0.30))
 
     @property
     def _panel_h(self):
-        return min(460, int(SCREEN_HEIGHT * 0.32))
+        return min(736, int(SCREEN_HEIGHT * 0.51))
 
     def __init__(self):
         self._title_font = None
@@ -32,11 +32,10 @@ class PauseOverlay:
     def _ensure_fonts(self):
         if self._title_font is None:
             import typography as typo
-            from config import get_mobile_scale
             m = get_mobile_scale()
-            self._title_font = typo.display_bold(int(42 * m))
-            self._option_font = typo.body_bold(int(26 * m))
-            self._small_font = typo.body(int(16 * m))
+            self._title_font = typo.display_bold(int(68 * m))
+            self._option_font = typo.body_bold(int(42 * m))
+            self._small_font = typo.body(int(26 * m))
 
     def reset(self):
         self.selected = 0
@@ -57,14 +56,14 @@ class PauseOverlay:
         panel_h = self._panel_h
         panel_x = SCREEN_WIDTH // 2 - panel_w // 2
         panel_y = SCREEN_HEIGHT // 2 - panel_h // 2
-        slide_y = int((1.0 - self._fade_t) * 30)
+        slide_y = int((1.0 - self._fade_t) * 48)
         panel_y -= slide_y
 
         panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        pygame.draw.rect(panel, (*t.panel_bg, 230), panel.get_rect(), border_radius=14)
-        pygame.draw.rect(panel, t.brass_500, panel.get_rect(), 2, border_radius=14)
-        inner = pygame.Rect(8, 8, panel_w - 16, panel_h - 16)
-        pygame.draw.rect(panel, t.brass_700, inner, 1, border_radius=10)
+        pygame.draw.rect(panel, (*t.panel_bg, 230), panel.get_rect(), border_radius=22)
+        pygame.draw.rect(panel, t.brass_500, panel.get_rect(), 3, border_radius=22)
+        inner = pygame.Rect(13, 13, panel_w - 26, panel_h - 26)
+        pygame.draw.rect(panel, t.brass_700, inner, 1, border_radius=16)
         screen.blit(panel, (panel_x, panel_y))
 
         title_surf = self._title_font.render("PAUSED", True, t.brass_300)
@@ -74,7 +73,7 @@ class PauseOverlay:
         rule_y = panel_y + int(panel_h * 0.22)
         pygame.draw.line(
             screen, t.brass_700,
-            (panel_x + 60, rule_y), (panel_x + panel_w - 60, rule_y), 1,
+            (panel_x + 96, rule_y), (panel_x + panel_w - 96, rule_y), 2,
         )
 
         start_y = panel_y + int(panel_h * 0.30)
@@ -88,10 +87,10 @@ class PauseOverlay:
             rect = label_surf.get_rect(center=(SCREEN_WIDTH // 2, y))
             self._option_rects.append((rect, key))
             if is_focus:
-                bar = pygame.Rect(rect.x - 18, rect.y, 4, rect.height)
-                pygame.draw.rect(screen, t.brass_300, bar, border_radius=2)
-                bar2 = pygame.Rect(rect.right + 14, rect.y, 4, rect.height)
-                pygame.draw.rect(screen, t.brass_300, bar2, border_radius=2)
+                bar = pygame.Rect(rect.x - 28, rect.y, 6, rect.height)
+                pygame.draw.rect(screen, t.brass_300, bar, border_radius=3)
+                bar2 = pygame.Rect(rect.right + 22, rect.y, 6, rect.height)
+                pygame.draw.rect(screen, t.brass_300, bar2, border_radius=3)
             screen.blit(label_surf, rect)
 
         hint_surf = self._small_font.render(

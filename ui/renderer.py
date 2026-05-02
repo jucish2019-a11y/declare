@@ -990,6 +990,8 @@ class Renderer:
         return getattr(self, "_card_back_style", "classic")
 
     def set_back_style(self, style):
+        if getattr(self, "_card_back_style", None) == style:
+            return
         self._card_back_style = style
         card_render.invalidate_cache()
 

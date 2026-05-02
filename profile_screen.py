@@ -27,6 +27,7 @@ class ProfileScreen:
         self.tab_rects = {}
         self.back_rect = None
         self._theme_rects = {}
+        self._back_rects = {}
 
     def _ensure(self):
         if self._title_font is None:
@@ -179,9 +180,13 @@ class ProfileScreen:
         gx = (SCREEN_WIDTH - total_w) // 2
         ry = 360
         wins = prof.stats.games_won
+        active_key = getattr(prof.settings, "equipped_card_back", "classic")
+        self._back_rects = {}
         for i, (key, label, threshold) in enumerate(styles):
             unlocked = key in prof.unlocked_card_backs
+            is_active = unlocked and key == active_key
             rx = gx + i * (pw + gap)
+            self._back_rects[key] = pygame.Rect(rx, ry, pw, ph)
             cached = card_render.paint_back(key, pw, ph)
             preview = cached if unlocked else cached.copy()
             if not unlocked:
@@ -192,14 +197,34 @@ class ProfileScreen:
                 lf = self._number_font.render("LOCKED", True, th.brass_300)
                 preview.blit(lf, lf.get_rect(center=(pw // 2, ph // 2)))
             self.screen.blit(preview, (rx, ry))
+            if is_active:
+                pygame.draw.rect(self.screen, th.brass_300,
+                                 pygame.Rect(rx - 6, ry - 6, pw + 12, ph + 12),
+                                 3, border_radius=18)
             label_color = th.brass_300 if unlocked else th.text_muted
             l_surf = self._tab_font.render(label, True, label_color)
             self.screen.blit(l_surf, l_surf.get_rect(midtop=(rx + pw // 2, ry + ph + 26)))
-            if not unlocked:
+            status_y = ry + ph + 80
+            if is_active:
+                badge_w, badge_h = 132, 30
+                bx = rx + pw // 2 - badge_w // 2
+                pygame.draw.rect(self.screen, th.brass_300,
+                                 pygame.Rect(bx, status_y, badge_w, badge_h),
+                                 border_radius=badge_h // 2)
+                pygame.draw.rect(self.screen, th.brass_900,
+                                 pygame.Rect(bx, status_y, badge_w, badge_h),
+                                 1, border_radius=badge_h // 2)
+                bsurf = self._small_font.render("EQUIPPED", True, th.brass_900)
+                self.screen.blit(bsurf, bsurf.get_rect(
+                    center=(rx + pw // 2, status_y + badge_h // 2)))
+            elif unlocked:
+                hint = self._small_font.render("Click to equip", True, th.text_dim)
+                self.screen.blit(hint, hint.get_rect(midtop=(rx + pw // 2, status_y)))
+            else:
                 progress = min(wins, threshold)
                 hint_text = f"Win {threshold} games  ({progress}/{threshold})"
                 hint = self._small_font.render(hint_text, True, th.brass_300)
-                self.screen.blit(hint, hint.get_rect(midtop=(rx + pw // 2, ry + ph + 80)))
+                self.screen.blit(hint, hint.get_rect(midtop=(rx + pw // 2, status_y)))
 
     def _draw_themes(self, prof, th):
         """Theme gallery: 4 preview cards horizontally — Parlor + 3 unlockables.
@@ -403,6 +428,19 @@ class ProfileScreen:
                     profile_mod.save(prof)
                     audio.play("click")
                     return None
+            # Click-to-equip on the Backs tab.
+            if self.tab == "backs":
+                for key, rect in self._back_rects.items():
+                    if not rect.collidepoint(event.pos):
+                        continue
+                    if key not in prof.unlocked_card_backs:
+                        return None
+                    if getattr(prof.settings, "equipped_card_back", "classic") == key:
+                        return None
+                    prof.settings.equipped_card_back = key
+                    profile_mod.save(prof)
+                    audio.play("click")
+                    return "back_changed"
             if self.back_rect and self.back_rect.collidepoint(event.pos):
                 audio.play("click")
                 return "back"

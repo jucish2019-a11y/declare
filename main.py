@@ -517,6 +517,7 @@ async def main():
 
     renderer = Renderer(screen)
     renderer.set_game_settings(game_settings)
+    renderer.set_back_style(getattr(prof.settings, "equipped_card_back", "classic"))
     menu_screen = MenuScreen(screen)
     setup_screen = SetupScreen(screen)
     peek_screen = PeekScreen(screen, game_settings.hand_size, game_settings.peek_count, game_settings.peek_phase_seconds)
@@ -829,7 +830,9 @@ async def main():
 
             elif current_screen == "profile":
                 action = profile_screen.handle_event(event, prof)
-                if action == "back":
+                if action == "back_changed":
+                    renderer.set_back_style(prof.settings.equipped_card_back)
+                elif action == "back":
                     current_screen = "menu"
 
             elif current_screen == "how_to_play":

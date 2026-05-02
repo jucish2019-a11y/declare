@@ -114,6 +114,7 @@ class SettingsBag:
     coach_mode: bool = False
     streamer_mode: bool = False
     hold_to_declare: bool = False
+    equipped_card_back: str = "classic"
     keybinds: dict = field(default_factory=lambda: {
         "draw":     "1",
         "declare":  "2",
@@ -215,6 +216,7 @@ def _from_dict(data: dict) -> Profile:
         coach_mode=settings_data.get("coach_mode", False),
         streamer_mode=settings_data.get("streamer_mode", False),
         hold_to_declare=settings_data.get("hold_to_declare", False),
+        equipped_card_back=settings_data.get("equipped_card_back", "classic"),
         keybinds=settings_data.get("keybinds", SettingsBag().keybinds),
     )
 

@@ -41,47 +41,58 @@
   - Card highlight: 20 → 8 circles
   - Fan glow: 18 → 10 ellipses
 
+### 4. UI Simplification (Completed — 2026-05-03)
+- Main Menu: 6 items → 4 buttons (Play, Play Online, Help, Quit)
+  - Help combines Tutorial + How To Play
+  - Settings and Profile accessed in-game via hamburger menu
+- Pause Menu: 5 items → 4 items (Resume, Restart Match, Settings, Quit to Menu)
+- In-Game HUD: 3 icons → single hamburger menu button (gear/pause/quit consolidated)
+- Settings Panel: 6 tabs → 3 tabs (Display, Gameplay, Preferences)
+- MenuScreen uses single `Button` class with optional icon support
+
+### 5. Merge — VicOlaitan's Latest Updates (Completed — 2026-05-03)
+- Merged `origin/master` (6 commits: server multiplayer, card back equip, textured letterboxes, settings alignment, setup fonts, winner fix)
+- Resolved conflicts in `main.py`, `ui/settings.py`
+- New features integrated:
+  - Card back equipping from Profile screen (click unlocked back → golden border)
+  - Textured letterbox bars (felt texture in-game, menu backdrop in menus)
+  - Settings row alignment constants (`_LABEL_COL_W`, `_ROW_H`, `_BTN_H`)
+  - Setup screen text enlargement (`small_font` 13→22, `section_font` 14→24)
+  - Atmospheric lighting default `True` → `False`
+  - Winner comparison fix (compares `seat_index` instead of Player object)
+- Server multiplayer backbone added (`server/` directory) — no client UI yet
+
+### 6. Merge — Online Multiplayer Client (Completed — 2026-05-03)
+- Merged `origin/master` (2 commits: client networking Phase 1B, runtime server URL override)
+- Resolved conflicts in `main.py`, `ui/screens.py`
+- New features integrated:
+  - Online flow screens: Nickname, Online Menu, Online Lobby (`ui/online_screens.py`)
+  - WebSocket client: `online/browser_ws.py`, `online/desktop_ws.py`, `online/client.py`
+  - Proxy GameManager for server-authoritative state (`online/proxy_manager.py`)
+  - Runtime server URL override (`online/url.py`) — no rebuild needed
+- Preserved UI simplification:
+  - Main Menu kept at 4 buttons (added Play Online, removed Tutorial/How To Play/Profile/Settings)
+  - Settings kept at 3 tabs
+  - HUD kept as single hamburger button
+  - Performance caches (`_cached` pattern, fan glow/rotation caches) restored
+
 ## Pending Feedback / TODO
 
-### UI Simplification (User Feedback — 2026-05-02)
-
-**Problem:** The user feels there are **too many options** and **too many menu things on the UI**.
-
-Reference screenshots show a mobile web app (timarche.net) with a cluttered hamburger menu and bottom tab bar. The user wants the Declare UI to be simpler and cleaner.
-
-**Specific pain points in Declare:**
-
-1. **Main Menu** (6 items): Play, Tutorial, How To Play, Profile & Stats, Settings, Quit
-   - Suggestion: Collapse secondary items. Keep Play prominently. Move Tutorial/How To inside the game or behind a single "Help" button. Move Settings to an in-game gear icon only.
-
-2. **Pause Menu** (5 items): Resume, Restart Match, Settings, How To Play, Quit to Menu
-   - Suggestion: Remove Settings and How To Play from pause (accessible via HUD gear icon instead). Keep: Resume, Restart, Quit.
-
-3. **Settings Panel** (6 tabs): Display, Gameplay, AI, Accessibility, Audio, Profile
-   - Suggestion: Group into fewer tabs or use a simpler layout. Many options could be preset defaults with only critical toggles exposed.
-
-4. **In-Game HUD:** Gear icon + Pause icon + Quit icon + action rail buttons + shuffle button + status bar + game log panel + player nameplates
-   - Suggestion: Reduce HUD chrome. Consolidate gear/pause/quit into a single menu button. Consider auto-hiding the game log. Reduce decorative ornament density.
-
-5. **Action Rail** during gameplay can show 6-7 buttons at once
-   - Suggestion: Group related actions or use contextual smart defaults to reduce button count.
-
-**Design principles from reference:**
-- Fewer, larger tap targets
-- Clear visual hierarchy (primary action prominent, secondary actions hidden)
-- Bottom tab bar for primary navigation (not applicable to game, but principle of limiting top-level choices applies)
-- Single "hamburger" or "more" button for everything else
+None active.
 
 ## Files Most Recently Modified
 
-- `main.py` — letterboxing, `_game_rect()`, touch coordinate mapping
+- `main.py` — letterboxing (`canvas_rect()`), `present(frame_mode)` textured bars, online flow routing
 - `config.py` — `get_mobile_scale()` 1.5x, `MIN_TOUCH_TARGET`, proportional `PLAYER_AREA`
-- `ui/renderer.py` — cached gradients, reduced iterations
-- `ui/screens.py` — cached card fan, cached fan glow
-- `ui/settings.py` — cached panel/tabs/pills
+- `ui/renderer.py` — cached gradients, `get_felt_texture()`, reduced iterations, single HUD menu button
+- `ui/screens.py` — 4-button menu (Play, Online, Help, Quit), cached card fan/glow, setup font sizes, `get_menu_bg_texture()`
+- `ui/settings.py` — cached panel/tabs/pills, 3-tab structure, row alignment constants
+- `ui/online_screens.py` — nickname, online menu, online lobby screens
+- `online/` — browser_ws, desktop_ws, client, proxy_manager, url modules
+- `profile_screen.py` — proportional sizing, card back equip click handler, `_back_rects`
 - `feel.py` — reduced vignette/lamp steps
 - `particles.py` — direct draw motes (no Surface alloc)
-- `pause.py`, `profile_screen.py`, `access_panel.py`, `toasts.py`, `captions.py` — mobile font scaling
+- `pause.py`, `access_panel.py`, `toasts.py`, `captions.py` — mobile font scaling
 - `web/index.html`, `web/declare.tmpl` — responsive CSS, custom properties, no zoom lock
 - `web/build_web.py` — aligned resolution to 2560x1440
 

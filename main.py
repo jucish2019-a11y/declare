@@ -34,7 +34,11 @@ from game.rules import get_valid_actions, can_self_pair, can_react_to_discard, c
 from game.settings import GameSettings
 from ui.renderer import Renderer, _get_seat_position, _player_area_bounds
 from ui.screens import MenuScreen, SetupScreen, PeekScreen, GameOverScreen
+from ui.online_screens import NicknameScreen, OnlineMenuScreen, OnlineLobbyScreen
 from ui.settings import SettingsMenu
+import online.client as online_client_mod
+from online.proxy_manager import ProxyGameManager
+DEFAULT_ONLINE_URL = os.environ.get("DECLARE_ONLINE_URL", "ws://127.0.0.1:8765")
 
 import theme
 import audio
@@ -49,6 +53,76 @@ from captions import CaptionStream
 from profile_screen import ProfileScreen, HowToPlayScreen
 from access_panel import AccessibilityPanel
 import daily
+
+
+def _install_online_overrides(proxy):
+    """Reroute mutating GameManager methods to send WS messages instead of
+    mutating local state. The proxy applies server snapshots into the same
+    GameManager so the renderer reads canonical state."""
+    gm = proxy.gm
+
+    def draw_card():
+        proxy.request_draw()
+        return None
+
+    def execute_player_action(action, details):
+        wire_details = {}
+        for k, v in (details or {}).items():
+            if k in ("my_slot", "player_slot", "opponent_index", "opponent_slot",
+                     "give_slot"):
+                wire_details[k] = v
+            elif k == "target_info":
+                ti = {}
+                src = v or {}
+                for tk, tv in src.items():
+                    if tk in ("slot", "player_index", "my_slot",
+                              "target_player", "their_slot"):
+                        ti[tk] = tv
+                wire_details["target_info"] = ti
+        proxy.request_action(action, wire_details)
+        return {}
+
+    def execute_self_pair_action(slot_a, slot_b):
+        proxy.request_self_pair(slot_a, slot_b)
+        return {}
+
+    def attempt_reactive_drop_self(player_idx, slot):
+        proxy.request_react_drop_self(slot)
+        return {"success": True, "result": {}}
+
+    def attempt_reactive_drop_opponent(reacting_idx, opp_idx, opp_slot, give_slot):
+        proxy.request_react_drop_opponent(opp_idx, opp_slot, give_slot)
+        return {"success": True, "result": {}}
+
+    def shuffle_player_hand(_player_idx):
+        proxy.request_action("shuffle", {})
+
+    def resolve_declaration():
+        return {}
+
+    def check_game_over():
+        return False
+
+    def start_reaction_window(*_args, **_kwargs):
+        return False
+
+    def end_turn():
+        return None
+
+    def update(_dt):
+        return None
+
+    gm.draw_card = draw_card
+    gm.execute_player_action = execute_player_action
+    gm.execute_self_pair_action = execute_self_pair_action
+    gm.attempt_reactive_drop_self = attempt_reactive_drop_self
+    gm.attempt_reactive_drop_opponent = attempt_reactive_drop_opponent
+    gm.shuffle_player_hand = shuffle_player_hand
+    gm.resolve_declaration = resolve_declaration
+    gm.check_game_over = check_game_over
+    gm.start_reaction_window = start_reaction_window
+    gm.end_turn = end_turn
+    gm.update = update
 
 
 def _can_human_react(gm):
@@ -522,6 +596,18 @@ async def main():
     setup_screen = SetupScreen(screen)
     peek_screen = PeekScreen(screen, game_settings.hand_size, game_settings.peek_count, game_settings.peek_phase_seconds)
     game_over_screen = GameOverScreen(screen)
+
+    # Online state — populated when the user enters the Online flow.
+    nickname_screen = NicknameScreen(screen)
+    online_menu_screen = OnlineMenuScreen(screen)
+    online_lobby_screen = OnlineLobbyScreen(screen)
+    online_active = False
+    online_proxy = None
+    online_lobby_payload = None
+    online_your_seat = -1
+    online_pending_nickname = ""
+    online_pending_create = None      # dict of params if we need to create after hello
+    online_pending_join = ""
     settings_menu = SettingsMenu(screen)
     settings_menu.attach_profile(prof)
 
@@ -812,6 +898,10 @@ async def main():
                     current_screen = "setup"
                     setup_screen = SetupScreen(screen)
                     audio.play("click")
+                elif action == "online":
+                    current_screen = "nickname"
+                    nickname_screen = NicknameScreen(screen)
+                    audio.play("ui_open")
                 elif action == "tutorial":
                     tutorial.start()
                     audio.play("click")
@@ -839,6 +929,81 @@ async def main():
                 action = how_to_screen.handle_event(event)
                 if action == "back":
                     current_screen = "menu"
+
+            elif current_screen == "nickname":
+                res = nickname_screen.handle_event(event)
+                if res:
+                    name, payload = res
+                    if name == "back":
+                        current_screen = "menu"
+                        audio.play("ui_close")
+                    elif name == "continue":
+                        online_pending_nickname = payload
+                        oc = online_client_mod.client()
+                        if oc.status not in (online_client_mod.STATUS_CONNECTING,
+                                              online_client_mod.STATUS_CONNECTED):
+                            oc.connect(DEFAULT_ONLINE_URL)
+                        online_menu_screen.set_status("Connecting to server...")
+                        current_screen = "online_menu"
+                        audio.play("click")
+
+            elif current_screen == "online_menu":
+                res = online_menu_screen.handle_event(event)
+                if res:
+                    name, payload = res
+                    if name == "back":
+                        oc = online_client_mod.client()
+                        oc.close()
+                        current_screen = "menu"
+                        audio.play("ui_close")
+                    elif name == "create_room":
+                        oc = online_client_mod.client()
+                        if oc.is_connected:
+                            oc.send({
+                                "type": "create_room",
+                                "max_players": 4,
+                                "ai_fill": True,
+                                "hand_size": game_settings.hand_size,
+                                "peek_count": game_settings.peek_count,
+                                "reaction_window_seconds": getattr(
+                                    game_settings, "reaction_window_seconds", 8.0),
+                            })
+                            online_menu_screen.set_status("Creating room...")
+                        else:
+                            online_pending_create = {"max_players": 4}
+                            online_menu_screen.set_status("Connecting...")
+                    elif name == "join_room":
+                        oc = online_client_mod.client()
+                        code = (payload or "").strip().upper()
+                        if oc.is_connected:
+                            oc.send({"type": "join_room", "code": code})
+                            online_menu_screen.set_status(f"Joining {code}...")
+                        else:
+                            online_pending_join = code
+                            online_menu_screen.set_status("Connecting...")
+                    elif name == "random_match":
+                        toasts.push("Random match coming in Phase 2",
+                                     kind="info", life=2.5)
+
+            elif current_screen == "online_lobby":
+                res = online_lobby_screen.handle_event(event)
+                if res:
+                    name, _ = res
+                    oc = online_client_mod.client()
+                    if name == "leave":
+                        if oc.is_connected:
+                            oc.send({"type": "leave_room"})
+                        online_lobby_payload = None
+                        online_your_seat = -1
+                        current_screen = "online_menu"
+                        audio.play("ui_close")
+                    elif name == "start_game":
+                        if oc.is_connected:
+                            oc.send({"type": "start_game"})
+                            online_lobby_screen.set_status("Starting...")
+                    elif name == "toggle_ai_fill":
+                        toasts.push("AI fill is fixed at room creation in Phase 1",
+                                     kind="info", life=2.5)
 
             elif current_screen == "setup":
                 action = setup_screen.handle_event(event)
@@ -1408,13 +1573,33 @@ async def main():
                 action = game_over_screen.handle_event(event)
                 if action == "play_again":
                     game_over_result = None
-                    current_screen = "setup"
-                    setup_screen = SetupScreen(screen)
+                    if online_active:
+                        # Online play_again sends you back to the online menu;
+                        # re-creating a room is a fresh action.
+                        oc = online_client_mod.client()
+                        if oc.is_connected:
+                            oc.send({"type": "leave_room"})
+                        online_active = False
+                        online_proxy = None
+                        online_lobby_payload = None
+                        online_your_seat = -1
+                        current_screen = "online_menu"
+                    else:
+                        current_screen = "setup"
+                        setup_screen = SetupScreen(screen)
                 elif action == "menu":
                     game_over_result = None
+                    if online_active:
+                        oc = online_client_mod.client()
+                        if oc.is_connected:
+                            oc.send({"type": "leave_room"})
+                        online_active = False
+                        online_proxy = None
+                        online_lobby_payload = None
+                        online_your_seat = -1
                     current_screen = "menu"
 
-        if current_screen == "game" and game_manager is not None:
+        if current_screen == "game" and game_manager is not None and not online_active:
             cp = game_manager.current_player()
 
             if game_manager.state == GameState.REACTION_WINDOW and not cp.is_human:
@@ -1598,9 +1783,100 @@ async def main():
             status_message = ""
 
         if current_screen == "game_over" and prev_screen == "game" and game_manager is not None:
-            _finalize_game_stats(prof, game_manager, game_over_result, game_meta,
-                                  game_start_time, toasts, particles, achievement_queue)
+            # Skip stats logging for online games (Phase 1) — local stats apply
+            # to single-player only; online win counts will need a server hook.
+            if not online_active:
+                _finalize_game_stats(prof, game_manager, game_over_result, game_meta,
+                                      game_start_time, toasts, particles, achievement_queue)
         prev_screen = current_screen
+
+        # ------------------------------------------------------- online poll
+        oc = online_client_mod.client()
+        if oc.status != online_client_mod.STATUS_IDLE:
+            # As soon as the WS opens, send hello + any pending create/join.
+            if oc.is_connected and online_pending_nickname:
+                oc.send({"type": "hello",
+                          "nickname": online_pending_nickname,
+                          "client_id": prof.client_id or "anon"})
+                online_pending_nickname = ""
+                online_menu_screen.set_status("Connected.")
+                if online_pending_create:
+                    payload = {
+                        "type": "create_room",
+                        "max_players": 4, "ai_fill": True,
+                        "hand_size": game_settings.hand_size,
+                        "peek_count": game_settings.peek_count,
+                        "reaction_window_seconds": getattr(
+                            game_settings, "reaction_window_seconds", 8.0),
+                    }
+                    payload.update(online_pending_create)
+                    oc.send(payload)
+                    online_pending_create = None
+                if online_pending_join:
+                    oc.send({"type": "join_room", "code": online_pending_join})
+                    online_pending_join = ""
+            if oc.status == online_client_mod.STATUS_ERROR:
+                online_menu_screen.set_status(f"Error: {oc.error}")
+
+            for msg in oc.poll():
+                kind = msg.get("type")
+                if kind == "welcome":
+                    online_lobby_payload = msg
+                    online_your_seat = int(msg.get("your_seat", -1))
+                    online_lobby_screen.set_lobby(msg, online_your_seat)
+                    current_screen = "online_lobby"
+                elif kind == "room_update":
+                    if online_lobby_payload is None:
+                        online_lobby_payload = msg
+                    else:
+                        online_lobby_payload = {**online_lobby_payload, **msg}
+                    online_lobby_screen.set_lobby(online_lobby_payload, online_your_seat)
+                elif kind == "state_snapshot":
+                    if online_proxy is None and online_lobby_payload is not None:
+                        online_proxy = ProxyGameManager(online_lobby_payload, online_your_seat)
+                        online_proxy.attach_send(oc.send)
+                        _install_online_overrides(online_proxy)
+                        # Local "human" = your seat; remote players appear as
+                        # AI to the dispatch code so click handlers don't fire
+                        # on their cards. The local AI tick is already gated
+                        # by `online_active`, so no AI logic actually runs.
+                        for i, _p in enumerate(online_proxy.gm.players):
+                            _p.is_human = (i == online_your_seat)
+                        game_manager = online_proxy.gm
+                        renderer.set_game_settings(game_settings)
+                        online_active = True
+                        # Skip the local peek phase — server already started.
+                        current_screen = "game"
+                        game_meta = _new_game_meta(
+                            len(online_proxy.gm.players),
+                            [{"name": p.name, "is_human": p.is_human,
+                              "difficulty": "medium"} for p in online_proxy.gm.players],
+                            game_settings)
+                        game_start_time = pygame.time.get_ticks() / 1000.0
+                        game_over_result = None
+                    if online_proxy is not None:
+                        online_proxy.apply_snapshot(msg)
+                elif kind == "event":
+                    if online_proxy is not None:
+                        online_proxy.apply_event(msg)
+                elif kind == "game_over":
+                    if online_proxy is not None:
+                        online_proxy.apply_game_over(msg)
+                        game_over_result = online_proxy.gm.declaration_result
+                    current_screen = "game_over"
+                elif kind == "error":
+                    code = msg.get("code", "")
+                    if code == "peer_left":
+                        toasts.push("Other player left — game ended",
+                                     kind="error", life=3.0)
+                        online_active = False
+                        online_proxy = None
+                        online_lobby_payload = None
+                        online_your_seat = -1
+                        current_screen = "menu"
+                    else:
+                        online_menu_screen.set_status(msg.get("message", code))
+                        online_lobby_screen.set_status(msg.get("message", code))
 
         screen.fill(BG_GREEN)
 
@@ -1612,6 +1888,15 @@ async def main():
 
         elif current_screen == "how_to_play":
             how_to_screen.draw()
+
+        elif current_screen == "nickname":
+            nickname_screen.draw()
+
+        elif current_screen == "online_menu":
+            online_menu_screen.draw()
+
+        elif current_screen == "online_lobby":
+            online_lobby_screen.draw()
 
         elif current_screen == "setup":
             setup_screen.draw()

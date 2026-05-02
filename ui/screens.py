@@ -503,14 +503,16 @@ class MenuScreen:
         SETTINGS_OLIVE = (110, 95, 50)
         SETTINGS_OLIVE_HOVER = (140, 122, 68)
         self.play_button = Button(cx, base_y, bw, bh, "Play", SWAP_GREEN, SWAP_GREEN_HOVER)
-        self.tutorial_button = Button(cx, base_y + bh + bsp, bw, h48, "Tutorial", PEEK_BLUE, PEEK_BLUE_HOVER)
-        self.how_to_button = Button(cx, base_y + bh + h48 + bsp * 2, bw, h44, "How To Play", PAIR_TEAL, PAIR_TEAL_HOVER)
-        self.profile_button = Button(cx, base_y + bh + h48 + h44 + bsp * 3, bw, h44, "Profile & Stats", DISCARD_ORANGE, DISCARD_ORANGE_HOVER)
-        self.settings_button = Button(cx, base_y + bh + h48 + h44 * 2 + bsp * 4, bw, h44, "Settings", SETTINGS_OLIVE, SETTINGS_OLIVE_HOVER)
-        self.quit_button = Button(cx, base_y + bh + h48 + h44 * 3 + bsp * 5, bw, h44, "Quit", DECLARE_RED, DECLARE_RED_HOVER)
+        self.online_button = Button(cx, base_y + bh + bsp, bw, h48, "Play Online", PEEK_BLUE, PEEK_BLUE_HOVER)
+        self.tutorial_button = Button(cx, base_y + bh + h48 + bsp * 2, bw, h44, "Tutorial", PEEK_BLUE, PEEK_BLUE_HOVER)
+        self.how_to_button = Button(cx, base_y + bh + h48 + h44 + bsp * 3, bw, h44, "How To Play", PAIR_TEAL, PAIR_TEAL_HOVER)
+        self.profile_button = Button(cx, base_y + bh + h48 + h44 * 2 + bsp * 4, bw, h44, "Profile & Stats", DISCARD_ORANGE, DISCARD_ORANGE_HOVER)
+        self.settings_button = Button(cx, base_y + bh + h48 + h44 * 3 + bsp * 5, bw, h44, "Settings", SETTINGS_OLIVE, SETTINGS_OLIVE_HOVER)
+        self.quit_button = Button(cx, base_y + bh + h48 + h44 * 4 + bsp * 6, bw, h44, "Quit", DECLARE_RED, DECLARE_RED_HOVER)
         self.new_game_button = self.play_button
-        self.buttons = [self.play_button, self.tutorial_button, self.how_to_button,
-                        self.profile_button, self.settings_button, self.quit_button]
+        self.buttons = [self.play_button, self.online_button, self.tutorial_button,
+                        self.how_to_button, self.profile_button,
+                        self.settings_button, self.quit_button]
         self._t = 0.0
 
     def _draw_card_back_medallion(self, surface, cx, cy, scale=1.0):
@@ -734,6 +736,8 @@ class MenuScreen:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.play_button.is_clicked(event.pos):
                 return 'new_game'
+            if self.online_button.is_clicked(event.pos):
+                return 'online'
             if self.tutorial_button.is_clicked(event.pos):
                 return 'tutorial'
             if self.how_to_button.is_clicked(event.pos):

@@ -520,11 +520,14 @@ class MenuScreen:
         self.play_button = Button(cx, base_y, bw, int(bh * 1.15), "Play",
                                    SWAP_GREEN, SWAP_GREEN_HOVER, icon='play')
         self.online_button = Button(cx, base_y + int(bh * 1.15) + bsp * 2, bw, h48,
-                                     PEEK_BLUE, PEEK_BLUE_HOVER, icon='online')
+                                    "Play Online",
+                                    PEEK_BLUE, PEEK_BLUE_HOVER, icon='online')
         self.help_button = Button(cx, base_y + int(bh * 1.15) + h48 + bsp * 4, bw, h44,
-                                   PAIR_TEAL, PAIR_TEAL_HOVER, icon='tutorial')
+                                  "Help",
+                                  PAIR_TEAL, PAIR_TEAL_HOVER, icon='tutorial')
         self.quit_button = Button(cx, base_y + int(bh * 1.15) + h48 + h44 + bsp * 6, bw, h44,
-                                   DECLARE_RED, DECLARE_RED_HOVER, icon='quit')
+                                  "Quit",
+                                  DECLARE_RED, DECLARE_RED_HOVER, icon='quit')
         self.new_game_button = self.play_button
         self.buttons = [self.play_button, self.online_button, self.help_button, self.quit_button]
         self._t = 0.0

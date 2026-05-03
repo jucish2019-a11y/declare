@@ -1,0 +1,17 @@
+# Files/directories to exclude from the WASM (pygbag) bundle.
+# These are desktop-only or server-only and cause errors in the browser build.
+
+# Server backend (not needed in WASM)
+server/
+
+# Desktop-only WebSocket backend (emscripten uses browser_ws.py)
+online/desktop_ws.py
+
+# Desktop font download script (not needed in WASM)
+download_fonts.py
+
+# Desktop card download script (not needed in WASM)
+download_cards.py
+
+# Screenshot files (not needed in WASM)
+shot_*.png

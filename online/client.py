@@ -4,7 +4,8 @@ Pygame's main loop is synchronous. Online messages flow through two thread-safe
 queues (outgoing strings, incoming dicts) and a backend worker that owns the
 WebSocket. Two backends ship: `desktop_ws` (Python `websockets` package on a
 background thread) and `browser_ws` (the browser's native WebSocket via pygbag
-JS interop). Selection happens at import time.
+JS interop). Selection is deferred to connect time so pygbag's static analyzer
+doesn't try to process the desktop-only `threading`/`websockets` imports.
 """
 from __future__ import annotations
 
@@ -75,7 +76,8 @@ class OnlineClient:
         if self._status in (STATUS_CONNECTING, STATUS_CONNECTED):
             return
         self._set_status(STATUS_CONNECTING, error="")
-        self._backend = _open_ws(self, url, self._outgoing, self._incoming)
+        backend_fn = _ensure_backend()
+        self._backend = backend_fn(self, url, self._outgoing, self._incoming)
 
     def close(self) -> None:
         if self._status in (STATUS_CLOSED, STATUS_IDLE):
@@ -90,10 +92,21 @@ class OnlineClient:
 
 # ----------------------------------------------------------------- backends
 
-if sys.platform == "emscripten":
-    from online.browser_ws import _open_ws  # type: ignore  # noqa: E402,F401
-else:
-    from online.desktop_ws import _open_ws  # type: ignore  # noqa: E402,F401
+def _get_backend():
+    if sys.platform == "emscripten":
+        from online.browser_ws import _open_ws
+        return _open_ws
+    else:
+        from online.desktop_ws import _open_ws
+        return _open_ws
+
+_open_ws_impl = None
+
+def _ensure_backend():
+    global _open_ws_impl
+    if _open_ws_impl is None:
+        _open_ws_impl = _get_backend()
+    return _open_ws_impl
 
 
 # Module-level singleton — pygame code grabs it via online.client.client().
